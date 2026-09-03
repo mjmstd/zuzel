@@ -6,23 +6,30 @@ Dokument roboczy. Źródło prawdy dla dalszej pracy; aktualizujemy go w miarę 
 
 ## 0. Kontekst i założenia
 
-**Inspiracja:** gra żużlowa „w kreski” znana z papieru w kratkę oraz z programów typu
-*Kreski / Żużel 2001* (społeczność m.in. wokół kreski.org, Toruńska Liga Kreskowa).
+**Inspiracja:** gra żużlowa „w kreski” znana z programów typu *Kreski / Żużel 2001*
+(społeczność m.in. wokół kreski.org, Toruńska Liga Kreskowa) oraz z papierowej gry
+na kratce o tej samej nazwie.
 
 **Ważne zastrzeżenie:** strony `kreski.org` nie udało się otworzyć z tego środowiska
-(blokada proxy sieciowego), więc mechanika poniżej jest odtworzona z klasycznych zasad
-gry wektorowej na kratce. Wszystko oznaczone jako **[DO POTWIERDZENIA]** trzeba zweryfikować
-z oryginałem, zanim zamrozimy zasady.
+(blokada proxy sieciowego) — mechanika poniżej jest odtworzona z opisów i pamięci,
+nie z oryginalnego kodu. Miejsca oznaczone **[do wyważenia]** to stałe fizyki,
+które trzeba będzie dostroić po pierwszych testach, a nie fundamentalne zasady.
+
+**Model rozgrywki — ustalony:** real-time, sterowanie dwoma klawiszami (lewo/prawo),
+jak w *Żużlu 2001* — **nie** turowa gra wektorowa na kratce (to była pierwsza,
+błędna hipoteza; skorygowana po rozmowie). Zawodnik jedzie sam do przodu, gaz jest
+automatyczny, jedyną decyzją gracza jest kierunek. Szczegóły fizyki: `docs/RULES.md`.
 
 **Założenia projektowe:**
 
 | Decyzja | Wybór (domyślny) | Dlaczego |
 |---|---|---|
 | Platforma | przeglądarka (desktop + mobile) | zero instalacji, łatwo się dzielić linkiem, GitHub Pages za darmo |
-| Język | TypeScript | typy w silniku gry realnie ratują przed błędami geometrii |
-| Rendering | Canvas 2D | tor to siatka i kreski — WebGL to przerost formy |
-| Rozgrywka | turowa, deterministyczna | wierność oryginałowi + tanie testy, powtórki i sieć |
-| Start | hot-seat (2–4 graczy na jednym ekranie) + AI | grywalne najszybciej, bez backendu |
+| Język | TypeScript | typy w silniku gry realnie ratują przed błędami geometrii i fizyki |
+| Rendering | Canvas 2D | prosty tor i sylwetki motocykli — WebGL to przerost formy |
+| Rozgrywka | real-time, stały krok fizyki (`dt`), deterministyczna | wierność oryginałowi (lewo/prawo) + testowalna symulacja, powtórki, sieć |
+| Sterowanie | lewo/prawo per zawodnik, hot-seat = różne klawisze na jednej klawiaturze | naturalne dla gry real-time; do 2 graczy jednocześnie na jednym urządzeniu |
+| Start | hot-seat (1–2 graczy) + AI dopełniające skład do 4 | grywalne najszybciej, bez backendu |
 | Online | dopiero po MVP | wymaga serwera; silnik projektujemy tak, by dało się dołożyć |
 
 ---
@@ -31,10 +38,13 @@ z oryginałem, zanim zamrozimy zasady.
 
 Jedna strona w przeglądarce, na której:
 
-1. widzisz owalny tor żużlowy narysowany na siatce,
-2. 4 zawodników (czerwony / niebieski / biały / żółty — jak kaski w żużlu) startuje z pól startowych,
-3. każdy w swojej turze wybiera jeden z maksymalnie 9 dopuszczalnych ruchów,
-4. wyjazd poza bandę = upadek i kara, kontakt z rywalem = kolizja,
+1. widzisz owalny tor żużlowy (dwie proste + dwa łuki) z lotu ptaka,
+2. 4 zawodników (czerwony / niebieski / biały / żółty — jak kaski w żużlu) startuje
+   z pól startowych na prostej,
+3. każdy zawodnik jedzie sam, gracz(e) sterują wyłącznie kierunkiem (lewo/prawo),
+   pozostałych prowadzi AI,
+4. zbyt szybki wjazd w łuk = utrata przyczepności, wypadnięcie za bandę i upadek,
+   kontakt z rywalem = kolizja,
 5. po 4 okrążeniach jest meta, punktacja 3-2-1-0 i tabela biegu.
 
 Wszystko inne (liga, edytor torów, sieć, statystyki) jest **poza MVP** i wchodzi etapami.
@@ -43,60 +53,54 @@ Wszystko inne (liga, edytor torów, sieć, statystyki) jest **poza MVP** i wchod
 
 ## 2. Model rozgrywki — rdzeń mechaniki
 
-Klasyczne „wyścigi wektorowe” w żużlowej oprawie.
+Symulacja real-time o stałym kroku `dt` (fizyka niezależna od FPS renderingu).
+Pełna specyfikacja fizyki, band, kolizji i okrążeń: **`docs/RULES.md`** — tu tylko skrót.
 
-### 2.1 Ruch
+### 2.1 Sterowanie i fizyka
 
-Zawodnik ma pozycję `p = (x, y)` (węzeł siatki, liczby całkowite) i prędkość `v = (vx, vy)`.
-
-W swojej turze wybiera przyspieszenie `a ∈ {-1, 0, 1} × {-1, 0, 1}` (9 opcji), po czym:
+Jedyny input gracza: `steer ∈ {-1, 0, 1}`. Gaz automatyczny. Co klatkę fizyki:
 
 ```
-v' = v + a
-p' = p + v'
+angularVelocity = steer * TURN_RATE * grip(speed)
+heading        += angularVelocity * dt
+
+targetSpeed     = steer != 0 ? CORNER_SPEED : MAX_SPEED
+speed           = approach(speed, targetSpeed, ACCEL, BRAKE, dt)
+
+position       += (cos(heading), sin(heading)) * speed * dt
 ```
 
-Rysowany jest odcinek `p → p'` — to jest właśnie „kreska”. Długość kreski = prędkość,
-więc na prostej kreski się wydłużają, a przed łukiem trzeba je skrócić, inaczej wypadasz na bandę.
-Tu leży cała soczystość tej gry: hamowanie w odpowiednim momencie i szeroki/wąski łuk.
+`grip(speed)` maleje z prędkością — im szybciej jedziesz, tym wolniej skręcasz.
+`CORNER_SPEED < MAX_SPEED`, więc pełny gaz w łuku jest fizycznie niemożliwy do
+utrzymania na torze — trzeba wcześniej „ściągnąć”, dokładnie ten moment decyzji
+jest sercem gry. Stałe fizyki w jednym miejscu (`engine/config.ts`), do wyważenia.
 
-### 2.2 Ograniczenia
+### 2.2 Tor jako krzywa parametryczna
 
-- **Limit prędkości** `|v| ≤ V_MAX` (domyślnie 6) — chroni przed „ucieczką” liczb. **[DO POTWIERDZENIA — w oryginale limitu może nie być]**
-- **Zakaz jazdy pod prąd** — ruch musi mieć dodatni rzut na kierunek toru w danym sektorze, inaczej jest nielegalny.
-- **Postój** (`v = 0`) dozwolony tylko po upadku / na starcie.
+Na M1–M2 tor to **owal analityczny**: dwie proste + dwa półokręgi, opisany trzema
+liczbami (długość prostej, promień łuku, szerokość toru). Dzięki temu pozycja
+zawodnika względem osi toru (`s` — dystans wzdłuż osi, `offset` — odchylenie w bok)
+liczy się wprost, bez przecięć wielokątów. Dowolne tory (nieowalne) i edytor
+wracają w M5 z inną reprezentacją geometrii — patrz sekcja 6.
 
 ### 2.3 Banda i upadek
 
-Odcinek `p → p'` nie może przeciąć bandy zewnętrznej ani wewnętrznej (krawężnika),
-a `p'` musi leżeć na torze (między obiema bandami).
-
-Naruszenie = **upadek**: zawodnik wraca do ostatniego legalnego punktu, `v := 0`
-i traci `N` tur (domyślnie 2). Wariant „regulaminowy” (upadek = wykluczenie z biegu)
-jako opcja w ustawieniach. **[DO POTWIERDZENIA]**
+Jeśli `|offset| > szerokość_toru / 2` → zawodnik jest za bandą → upadek: prędkość
+spada do zera, kara czasowa (`CRASH_PENALTY`, domyślnie 1,5 s), powrót na ostatnią
+pozycję na torze.
 
 ### 2.4 Kolizje między zawodnikami
 
-Trzy warianty do wyboru w konfiguracji (implementujemy wszystkie, domyślny = B):
-
-- **A. Duchy** — zawodnicy się nie widzą (najprostsze, dobre do testów).
-- **B. Zajęty węzeł** — nie wolno skończyć ruchu na węźle zajętym przez rywala; przecięcie
-  cudzej świeżej kreski (z tej samej tury) = kolizja i upadek obu. To daje blokowanie i walkę o linię.
-- **C. Pełny kontakt** — każde przecięcie cudzego śladu = kolizja (najostrzejsze, najbliżej papieru).
+Domyślnie: dwóch zawodników bliżej siebie niż `2 × promień_zawodnika` → kolizja,
+obaj tracą prędkość jak przy upadku. Tryb „duchy” (bez kolizji) jako opcja do testów.
 
 ### 2.5 Okrążenia i meta
 
-Tor ma zdefiniowaną **linię startu/mety** oraz 3–4 **sektory kontrolne**. Okrążenie liczy się
-tylko wtedy, gdy zawodnik przekroczył kolejno wszystkie sektory (to blokuje oszustwo polegające
-na kręceniu się przy linii mety). Bieg = 4 okrążenia.
+Tor podzielony na 4 sektory wg `s`. Okrążenie liczy się po przejściu sektorów
+w kolejności `0→1→2→3→0`. Bieg = 4 okrążenia. Kolejność w wyścigu wg
+`lap * długość_toru + s`, malejąco — liczone co klatkę, bez udziału gracza.
 
-### 2.6 Kolejność tur
-
-Domyślnie: **sekwencyjnie**, kolejność wg aktualnej pozycji w wyścigu (prowadzący pierwszy).
-Wariant „jednoczesny” (wszyscy deklarują ruch, potem rozstrzygnięcie) trzymamy jako opcję —
-jest uczciwszy przy kolizjach, ale wymaga zasad rozstrzygania remisów. **[DO POTWIERDZENIA]**
-
-### 2.7 Punktacja żużlowa
+### 2.6 Punktacja żużlowa
 
 - Bieg (4 zawodników): **3 / 2 / 1 / 0** punkty.
 - Mecz: 15 biegów, dwie drużyny po 4+ zawodników, klasyczny program par startowych.
@@ -128,124 +132,118 @@ canvas i tak rysujemy ręcznie — dołożymy, jeśli menu urośnie), fizyka 2D 
 ```
 src/
   engine/            # czysta logika, bez DOM
-    types.ts         # Vec2, RiderState, RaceState, TrackData, Move
-    geometry.ts      # przecięcia odcinków, punkt-w-wielokącie, odległości
-    track.ts         # ładowanie toru, sektory, oś toru (centerline), progress()
-    rules.ts         # legalMoves(), applyMove(), kolizje, upadki
-    race.ts          # maszyna stanów biegu: START → RUNNING → FINISHED
-    scoring.ts       # punktacja biegu / meczu / ligi
-    replay.ts        # zapis i odtwarzanie listy ruchów
+    types.ts         # Vec2, RiderInput, RiderState, RaceState, RaceConfig
+    geometry.ts      # wektory, kąty, rzutowanie punktu na odcinek/łuk
+    track.ts         # owal analityczny: pointAt(s), nearestOnTrack(p) -> {s, offset}
+    physics.ts        # stepRider(rider, input, track, dt) -> nowy RiderState
+    rules.ts          # kolizje, upadki, kary
+    race.ts           # maszyna stanów biegu: START → RUNNING → FINISHED, tick(state, inputs, dt)
+    scoring.ts        # punktacja biegu / meczu / ligi
+    config.ts         # domyślny RaceConfig (stałe fizyki)
   ai/
-    evaluate.ts      # funkcja oceny pozycji
-    bot.ts           # greedy + przeszukiwanie w głąb
+    bot.ts            # sterowanie proporcjonalne: cel na osi toru → steer
   render/
-    canvas.ts        # rysowanie toru, siatki, kresek, zawodników
-    camera.ts        # skala, przesunięcie, dopasowanie do ekranu
-    animate.ts       # animacja przejazdu kreski
+    canvas.ts         # rysowanie toru (owal), zawodników, HUD-owych znaczników
+    camera.ts         # skala, przesunięcie, dopasowanie do ekranu
   ui/
-    controls.ts      # klawiatura (numpad/strzałki), myszka, dotyk
-    hud.ts           # okrążenia, prędkość, kolejność, punkty
-    screens.ts       # menu, wybór toru, wyniki
-  tracks/            # tory w JSON
-  main.ts
-docs/                # ten plan, zasady, format toru
-tests/               # testy silnika + „złote” powtórki
+    input.ts          # klawiatura → steer per zawodnik (hot-seat)
+    hud.ts             # okrążenia, pozycje, wyniki
+    screens.ts         # menu, wybór graczy/AI, wyniki
+  tracks/              # definicje torów (na razie owale parametryczne)
+  main.ts              # pętla gry: requestAnimationFrame + stały krok fizyki (accumulator)
+docs/                  # ten plan, zasady, format toru
+tests/                 # testy silnika
 ```
 
-**Zasada przewodnia:** `RaceState` jest niemutowalny, `applyMove(state, move) → newState` jest
-czystą funkcją. Dzięki temu za darmo dostajemy: cofanie ruchu, powtórki, testy migawkowe,
-podgląd „co się stanie, jak tu pojadę”, oraz AI, które może symulować przyszłość.
+**Zasada przewodnia:** `tick(state, inputs, dt) → newState` jest czystą funkcją operującą
+na niemutowalnym `RaceState`. Dzięki temu za darmo dostajemy: deterministyczne testy fizyki,
+powtórki (zapisany ciąg inputów), oraz AI, które może symulować przyszłość silnikiem produkcyjnym
+zamiast osobnym modelem.
 
 ---
 
 ## 5. Kluczowe algorytmy
 
-### 5.1 Legalne ruchy
+### 5.1 Krok fizyki
 
 ```ts
-function legalMoves(state: RaceState, riderId: number): Move[] {
-  // 9 kandydatów a ∈ {-1,0,1}²
-  // odfiltruj: przekroczenie V_MAX, jazda pod prąd, kolizja z rywalem
-  // NIE filtruj wyjazdu poza bandę — to legalny (głupi) ruch kończący się upadkiem,
-  // ale oznacz go flagą `crash: true`, żeby UI mógł go pokazać na czerwono
+function stepRider(rider: RiderState, input: Steer, track: OvalTrack, cfg: RaceConfig, dt: number): RiderState {
+  const grip = gripAt(rider.speed, cfg);
+  const angularVelocity = input * cfg.turnRate * grip;
+  const heading = rider.heading + angularVelocity * dt;
+
+  const targetSpeed = input !== 0 ? cfg.cornerSpeed : cfg.maxSpeed;
+  const speed = approach(rider.speed, targetSpeed, cfg.accel, cfg.brake, dt);
+
+  const position = add(rider.position, scale(fromAngle(heading), speed * dt));
+  return { ...rider, heading, speed, position };
 }
 ```
 
-### 5.2 Wykrywanie bandy
+`approach(current, target, accel, brake, dt)` przesuwa `current` w stronę `target`
+z osobnym tempem dla przyspieszania i hamowania — asymetria jest ważna: hamowanie
+przed łukiem musi być szybsze niż rozpędzanie, inaczej sterowanie jest bez sensu.
 
-Banda = polilinia (zamknięty wielokąt) zewnętrzna + wewnętrzna. Dla ruchu `p → p'`:
+### 5.2 Pozycja względem osi toru
 
-1. test przecięcia odcinka z każdym segmentem obu polilinii (klasyczny test orientacji CCW),
-2. przyspieszenie przez **grid bucketing** — segmenty band w kubełkach siatki, sprawdzamy tylko
-   kubełki na trasie odcinka (Bresenham). Przy torze rzędu 200 segmentów i tak byłoby szybko,
-   ale przy 4 zawodnikach × 9 podglądów × animacja warto to mieć od razu.
+Owal to funkcja `pointAt(s): {point, heading}` (patrz `docs/RULES.md` §1) złożona
+z 4 odcinków parametru (prosta, łuk, prosta, łuk). `nearestOnTrack(p)` szuka najbliższego
+`s` metodą rzutowania na każdy z 4 odcinków osobno (prosta → rzut ortogonalny,
+łuk → kąt względem środka okręgu) i bierze najlepszy wynik — 4 tanie obliczenia,
+żadnego przeszukiwania. Zwraca `{s, offset}`, gdzie `offset` to odległość boczna
+(dodatnia/ujemna) od osi — to jest jednocześnie test bandy (§2.3) i input dla AI.
 
-### 5.3 Postęp na torze (`progress`)
+### 5.3 Kolizje
 
-Tor ma wyliczoną **oś** (centerline) jako listę punktów z narastającą długością łuku.
-`progress(p)` = najbliższy punkt osi → dystans wzdłuż toru. Używane przez:
-sortowanie kolejności, licznik okrążeń (razem z sektorami) i funkcję oceny AI.
+Test odległości euklidesowej między każdą parą zawodników co klatkę — przy 4
+zawodnikach to 6 porównań, nie potrzeba przestrzennego indeksu.
 
-### 5.4 Meta
+### 5.4 Okrążenia
 
-Przecięcie odcinka ruchu z segmentem linii mety, we właściwym kierunku (znak iloczynu
-wektorowego), przy komplecie zaliczonych sektorów. Zapisujemy ułamkową pozycję przecięcia,
-żeby rozstrzygać, kto był pierwszy w tej samej turze.
+`s` z §5.2 dla całego toru jest ciągłe w `[0, długość)`. Utrzymujemy dla każdego
+zawodnika ostatni osiągnięty indeks sektora (0–3); przejście z sektora 3 do 0
+(czyli przekroczenie linii mety) nalicza okrążenie, o ile sektory 0→1→2→3 zostały
+zaliczone po kolei — to blokuje „cofanie się” przez metę jako oszustwo.
 
 ---
 
 ## 6. Format toru i edytor
 
-Tor jako JSON (szczegóły: `docs/TRACK_FORMAT.md`):
+Na M1–M2 tor to trzy liczby (`straightLength`, `turnRadius`, `width`) plus liczba
+okrążeń — definicja w `src/tracks/*.ts`, patrz `docs/RULES.md` §1.
 
-```json
-{
-  "name": "Motoarena",
-  "grid": { "width": 80, "height": 50 },
-  "outer": [[4,4],[76,4],[76,46],[4,46]],
-  "inner": [[20,14],[60,14],[60,36],[20,36]],
-  "direction": "ccw",
-  "startLine": [[40,4],[40,14]],
-  "startPositions": [[38,6],[38,8],[38,10],[38,12]],
-  "sectors": [ [[76,25],[60,25]], [[40,46],[40,36]], [[4,25],[20,25]] ],
-  "laps": 4
-}
-```
-
-Bandy jako wielokąty (nie tylko owale) pozwalają robić dziwne tory — a to jest pół zabawy.
-
-**Edytor torów** (etap M5): klikanie po siatce, rysowanie band, stawianie linii mety i sektorów,
-walidacja (czy tor jest zamknięty, czy oś się liczy, czy da się przejechać), eksport/import JSON.
-Bez edytora zostaniemy przy 2–3 torach i to zabije żywotność gry.
+Format z dowolnymi wielokątami band (`docs/TRACK_FORMAT.md`) zostaje udokumentowany
+jako cel na **M5** (edytor torów) — wtedy `nearestOnTrack` przechodzi z formuł
+analitycznych na próbkowaną oś (centerline) liczoną z geometrii wielokątów.
+Do tego czasu `TRACK_FORMAT.md` opisuje docelowy, a nie aktualnie używany format.
 
 ---
 
 ## 7. AI przeciwnika
 
-Trzy poziomy, ten sam interfejs `chooseMove(state, riderId): Move`:
+Wspólny interfejs `chooseSteer(state, riderId): -1 | 0 | 1`, trzy poziomy:
 
-1. **Nowicjusz** — greedy: spośród legalnych ruchów bierz ten o największym `progress`,
-   odrzucając te, po których nie istnieje żaden bezpieczny ruch w następnej turze
-   (to jedno sprawdzenie w przód likwiduje 90% głupich upadków).
-2. **Zawodowiec** — przeszukiwanie w głąb 3–5 tur (beam search, szerokość ~20),
-   ocena = `progress − ryzyko − kara za bliskość bandy`.
-3. **Mistrz** — jak wyżej + wcześniej policzona *linia idealna* (racing line) i zachowania
-   taktyczne: krycie wewnętrznej, blokowanie na łuku, spóźnione hamowanie przy wyprzedzaniu.
+1. **Nowicjusz** — steruje w stronę osi toru: jeśli `offset > próg` skręca do środka,
+   inaczej jedzie prosto; nie reaguje na innych zawodników.
+2. **Zawodowiec** — steruje w stronę punktu na osi toru odległego o `lookahead(speed)`
+   przed sobą (klasyczny pure pursuit), więc sam zwalnia przed łukiem, bo `grip` naturalnie
+   go spowalnia; unika kolizji przez lokalne odpychanie od zawodników w promieniu kolizji.
+3. **Mistrz** — jak wyżej + krycie wewnętrznej linii przy wyprzedzaniu i pod presją
+   z tyłu, agresywniejszy `lookahead` na prostej.
 
-Ponieważ silnik jest czystą funkcją, AI symuluje wprost na `RaceState` — nie ma potrzeby
-pisania osobnego modelu świata.
+AI odpytuje ten sam silnik fizyki co gracz — nie ma osobnego modelu ruchu do utrzymania.
 
 ---
 
 ## 8. UI/UX
 
-- **Siatka + tor** rysowane jak na kartce: cienka kratka, grube bandy, kreski w kolorach kasków.
-- **Podgląd ruchu:** 9 kandydatów jako kropki; zielone = bezpieczne, żółte = ryzykowne
-  (brak bezpiecznej kontynuacji), czerwone = upadek. To najważniejszy element czytelności gry.
-- **Sterowanie:** numpad 1–9 / strzałki + Enter, klik myszką w kropkę, tap na mobile.
-- **HUD:** okrążenie, prędkość, kolejność, punkty, kto ma turę.
-- **Animacja** przejazdu kreski (~200 ms) + ślad; wyłączalna dla szybkiej gry.
-- **Powtórka** po biegu ze suwakiem.
+- **Tor** rysowany jako owal z lotu ptaka: banda zewnętrzna i wewnętrzna, linia
+  startu/mety, zawodnicy jako strzałki w kolorach kasków (kierunek = heading).
+- **Sterowanie:** klawiatura, różne klawisze per gracz w hot-seat (§ w `RULES.md`),
+  na mobile dwa duże przyciski lewo/prawo po bokach ekranu.
+- **HUD:** okrążenie / limit, aktualna kolejność, kto jest kim (kolor + nazwa),
+  wynik po biegu.
+- **Kamera:** stały widok całego toru (na start) — śledzenie lidera jako opcja później.
 - Interfejs po polsku, z możliwością dołożenia EN później (proste `i18n` na słowniku).
 
 ---
@@ -311,14 +309,20 @@ Każdy etap kończy się działającą, wypchniętą wersją. „Done” = testy
 
 ---
 
-## 13. Decyzje do potwierdzenia przed M1
+## 13. Decyzje — status
 
-1. **Model ruchu:** klasyczne wektory na kratce (jak wyżej) czy sterowanie w czasie rzeczywistym
-   dwoma klawiszami (lewo/prawo), jak w niektórych wersjach *Żużla 2001*?
-2. **Kolizje:** wariant A / B / C z punktu 2.4.
-3. **Limit prędkości:** czy w oryginale, który pamiętasz, był jakiś sufit prędkości?
-4. **Upadek:** kara w turach czy wykluczenie z biegu?
-5. **Kolejność tur:** sekwencyjna czy jednoczesna deklaracja ruchów?
+1. ~~Model ruchu: wektory na kratce czy real-time lewo/prawo?~~ **Rozstrzygnięte:
+   real-time, lewo/prawo** (jak *Żużel 2001*). Plan i `RULES.md` zaktualizowane.
+2. **Kolizje:** domyślnie „solid” (utrata prędkości przy kontakcie), z trybem „ghost”
+   do testów — patrz `RULES.md` §6. Do ewentualnej korekty po pierwszej grze.
+3. **Stałe fizyki** (`maxSpeed`, `cornerSpeed`, `turnRate`, kara za upadek) — wartości
+   startowe w `engine/config.ts`, jawnie oznaczone jako **[do wyważenia]**; strojenie
+   po pierwszym grywalnym buildzie (M2), nie na sucho.
+4. **Upadek:** kara czasowa (1,5 s), nie wykluczenie z biegu — łagodniejsze, lepsze
+   do testowania w pojedynkę. Wykluczenie jako opcja konfiguracji, jeśli okaże się
+   bliższe oryginałowi.
+5. **Kolejność akcji:** nieaktualne — w modelu real-time nie ma tur, wszyscy jadą
+   symultanicznie co klatkę fizyki.
 
-Jeśli masz zrzuty ekranu, pliki torów albo pamiętasz konkretne szczegóły z kreski.org —
-to najszybszy sposób, żeby dopasować grę do wspomnienia zamiast do mojej rekonstrukcji.
+Jeśli w trakcie grania okaże się, że pamięć o kreski.org podpowiada inne detale
+(np. inny kształt toru, inne zasady startu) — zgłoś, poprawiamy `RULES.md` i kod razem.

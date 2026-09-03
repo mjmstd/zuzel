@@ -1,87 +1,97 @@
-# Zasady gry — specyfikacja robocza
+# Zasady gry — specyfikacja robocza (v0.2 — model real-time)
 
-Wersja 0.1 — projekt do zatwierdzenia. Wszystko, co oznaczone **[?]**, wymaga potwierdzenia
-z oryginałem (kreski.org / Żużel 2001).
+Zmiana względem v0.1: mechanika **nie jest turowa**. Zawodnik jedzie sam do przodu,
+gracz steruje wyłącznie kierunkiem (lewo/prawo), jak w klasycznym *Żużlu 2001*.
+Prędkość jest pochodną fizyki — gaz jest automatyczny, karą za zbyt ostry skręt
+przy dużej prędkości jest utrata przyczepności (wypadnięcie za bandę).
 
-## 1. Plansza
+## 1. Tor
 
-Tor narysowany na siatce całkowitoliczbowej. Dwie bandy: zewnętrzna i wewnętrzna (krawężnik).
-Jazda odbywa się między nimi, w kierunku przeciwnym do ruchu wskazówek zegara (jak w żużlu).
+Na etapie M1–M2 tor jest **owalny, parametryczny** (dwie proste + dwa łuki, jak realny tor
+żużlowy), zdefiniowany trzema liczbami: długość prostej, promień łuku, szerokość toru.
+Dzięki temu pozycja zawodnika na torze (`s` — dystans wzdłuż osi, `offset` — odchylenie
+w bok od osi) liczy się analitycznie, bez ciężkiej geometrii wielokątów. Dowolne tory
+(niekoniecznie owalne) wracają w etapie M5 wraz z edytorem — wtedy przechodzimy na
+reprezentację z siatką segmentów, opisaną w `TRACK_FORMAT.md`.
 
-## 2. Zawodnik
-
-Stan zawodnika: pozycja `p = (x, y)` w węźle siatki oraz prędkość `v = (vx, vy)`.
-Na starcie `p` = pole startowe, `v = (0, 0)`.
-
-## 3. Ruch
-
-W swojej turze zawodnik wybiera przyspieszenie `a = (ax, ay)`, gdzie `ax, ay ∈ {-1, 0, 1}`.
+## 2. Zawodnik — stan
 
 ```
-v_nowe = v + a
-p_nowe = p + v_nowe
+position: Vec2       // pozycja w świecie (metry/jednostki)
+heading:  number      // kąt jazdy, radiany
+speed:    number       // prędkość skalarna, jednostki/s
 ```
 
-Na planszy rysowany jest odcinek („kreska”) od `p` do `p_nowe`. Zawodnik ma więc do wyboru
-maksymalnie 9 pól — pole „na wprost” (kontynuacja z tą samą prędkością) i 8 sąsiednich.
+## 3. Sterowanie
 
-**Ograniczenia:**
+Jedyny input gracza w każdej klatce: `steer ∈ {-1, 0, 1}` (skręt w lewo / prosto / w prawo).
+Gaz jest automatyczny — silnik zawsze „ciągnie” w stronę prędkości maksymalnej.
 
-- `|v| ≤ V_MAX`, domyślnie 6 **[?]**
-- ruch musi mieć dodatni rzut na kierunek toru w bieżącym sektorze (zakaz jazdy pod prąd)
-- `v = (0,0)` dopuszczalne wyłącznie na starcie i po upadku
+## 4. Fizyka (krok o stałym `dt`)
 
-## 4. Banda
+```
+angularVelocity = steer * TURN_RATE * grip(speed)
+heading        += angularVelocity * dt
 
-Kreska nie może przeciąć żadnej z band, a jej koniec musi leżeć na torze.
-Naruszenie = **upadek**.
+targetSpeed     = steer != 0 ? CORNER_SPEED : MAX_SPEED
+speed           = approach(speed, targetSpeed, ACCEL, BRAKE, dt)
 
-**Upadek** (wariant domyślny): zawodnik wraca na ostatnią legalną pozycję, `v := 0`,
-traci 2 tury. Wariant alternatywny: wykluczenie z biegu (0 punktów). **[?]**
+velocity        = (cos(heading), sin(heading)) * speed
+position        += velocity * dt
+```
 
-## 5. Kolizje
+- `grip(speed)` maleje z prędkością — przy dużej prędkości skręt jest wolniejszy (opór
+  przyczepności), co wymusza wcześniejsze „ściąganie” przed łukiem, tak jak w oryginale.
+- `CORNER_SPEED < MAX_SPEED` — jazda na pełnym gazie w skręcie jest niemożliwa do
+  utrzymania w granicach toru; kto nie zwolni, wypada.
+- Wszystkie stałe (`TURN_RATE`, `MAX_SPEED`, `CORNER_SPEED`, `ACCEL`, `BRAKE`,
+  szerokość toru) w jednym miejscu (`engine/config.ts`) — do strojenia. **[do wyważenia
+  po pierwszych testach z Tobą]**
 
-Wariant domyślny (**B**):
+## 5. Banda i upadek
 
-- nie wolno zakończyć ruchu w węźle zajętym przez innego zawodnika,
-- przecięcie kreski postawionej w tej samej turze przez innego zawodnika = kolizja,
-  obaj upadają.
+Po każdym kroku liczymy `(s, offset)` = pozycja zawodnika względem osi toru.
+Jeśli `|offset| > szerokość/2` → zawodnik jest za bandą → **upadek**:
+prędkość spada do 0, zawodnik traci `CRASH_PENALTY` sekund (domyślnie 1,5 s) zanim
+znów może przyspieszać, wraca na ostatnią pozycję na torze.
 
-Warianty alternatywne: **A** (brak kolizji) i **C** (kolizja z każdym śladem, także starym). **[?]**
+## 6. Kolizje
 
-## 6. Okrążenia i meta
+Jeśli odległość między dwoma zawodnikami spadnie poniżej `2 × promień_zawodnika`
+→ kolizja: obaj tracą prędkość (jak przy upadku). Wariant „duchy” (bez kolizji)
+dostępny jako opcja konfiguracji do testów.
 
-Tor ma linię startu/mety oraz 3 sektory kontrolne. Okrążenie zalicza się po przekroczeniu
-linii mety we właściwym kierunku, pod warunkiem wcześniejszego zaliczenia wszystkich sektorów.
-Bieg trwa 4 okrążenia.
+## 7. Okrążenia i meta
 
-Gdy dwóch zawodników przekroczy metę w tej samej turze, decyduje ułamkowa pozycja
-przecięcia odcinka z linią mety (kto był „dalej”).
+Tor podzielony na 4 ćwiartki (sektory) wg `s`. Okrążenie liczy się, gdy zawodnik
+przejdzie sektory w kolejności `0 → 1 → 2 → 3 → 0`. Bieg trwa `LAPS` okrążeń (domyślnie 4).
+Kolejność zawodników w wyścigu = `lap * totalLength + s`, malejąco.
 
-## 7. Kolejność
+## 8. Sterowanie w hot-seat
 
-Sekwencyjna: w każdej turze ruszają się kolejno wszyscy zawodnicy, w kolejności aktualnej
-pozycji w wyścigu (prowadzący pierwszy). **[?]**
+| Zawodnik | Lewo | Prawo |
+|---|---|---|
+| Gracz 1 | Strzałka w lewo | Strzałka w prawo |
+| Gracz 2 | A | D |
 
-## 8. Punktacja
+Pozostałe miejsca w biegu wypełnia AI (patrz `ai/bot.ts`).
 
-- Bieg: **3 / 2 / 1 / 0** punktów za miejsca 1–4. Upadek lub niedojechanie = 0.
-- Mecz: 15 biegów wg klasycznego programu par startowych, wygrywa drużyna z większą sumą punktów.
-- Liga: 2 punkty za wygrany mecz, 1 za remis, 0 za porażkę; przy równości decyduje bilans małych punktów.
+## 9. Punktacja
 
-## 9. Parametry konfiguracyjne
+Bez zmian względem v0.1: bieg 3/2/1/0, mecz 15 biegów, liga 2/1/0 pkt za mecz.
 
-Wszystkie liczby powyżej trzymamy w jednym obiekcie `RaceConfig`, żeby dało się je stroić
-bez ruszania logiki:
+## 10. Parametry konfiguracyjne (`RaceConfig`)
 
 ```ts
 interface RaceConfig {
-  maxSpeed: number;          // 6
-  laps: number;              // 4
-  crashPenaltyTurns: number; // 2
-  crashMode: 'penalty' | 'exclusion';
-  collisionMode: 'ghost' | 'node' | 'full';
-  turnOrder: 'sequential' | 'simultaneous';
-  allowReverse: boolean;     // false
+  laps: number;             // 4
+  maxSpeed: number;         // jednostki/s
+  cornerSpeed: number;      // < maxSpeed
+  accel: number;
+  brake: number;
+  turnRate: number;         // rad/s przy steer=1, prędkość=0
+  crashPenaltySeconds: number; // 1.5
+  collisionMode: 'ghost' | 'solid';
+  riderRadius: number;
 }
 ```
