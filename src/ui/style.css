@@ -1,0 +1,172 @@
+:root {
+  color-scheme: dark;
+  --bg: #10161a;
+  --panel: #1b232a;
+  --text: #eef2f4;
+  --muted: #9aa7ad;
+  --accent: #e8b34c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#board {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+#hud .lap-counter {
+  background: rgba(0, 0, 0, 0.55);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#hud .standings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 8px 12px;
+  border-radius: 8px;
+  min-width: 160px;
+}
+
+#hud .standings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+#hud .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+#hud .controls-hint {
+  background: rgba(0, 0, 0, 0.55);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 220px;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#overlay:empty {
+  pointer-events: none;
+}
+
+.panel {
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 28px 32px;
+  min-width: 320px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.panel h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+
+.panel p.subtitle {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.panel .options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel button {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: none;
+  background: #2a343c;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.panel button:hover {
+  background: #384450;
+}
+
+.panel button.primary {
+  background: var(--accent);
+  color: #1a1204;
+}
+
+.panel button.primary:hover {
+  background: #f2c265;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.results-table th, .results-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #2c363d;
+  font-size: 14px;
+}
+
+.results-table .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
