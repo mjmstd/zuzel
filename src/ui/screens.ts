@@ -31,6 +31,15 @@ export function renderStartScreen(overlay: HTMLElement, onStart: (humanCount: Hu
         Steruj tylko kierunkiem — gaz jest automatyczny.<br>
         Zwolnij przed łukiem, inaczej wypadniesz za bandę.
       </p>
+      <details>
+        <summary>Jak grać?</summary>
+        <ul>
+          <li>Jedyne, czym sterujesz, to kierunek — gaz dodaje się sam.</li>
+          <li>Im szybciej jedziesz, tym wolniej skręcasz — przed łukiem ściągnij wcześniej.</li>
+          <li>Wypadnięcie za bandę albo zderzenie z rywalem = krótki upadek i utrata prędkości.</li>
+          <li>Wygrywa bieg (4 okrążenia) — liczy się kolejność na mecie.</li>
+        </ul>
+      </details>
       <div class="option-group" id="human-group">
         <p class="group-label">Ilu graczy?</p>
         <div class="options row">
@@ -64,6 +73,7 @@ export function renderResultsScreen(
   results: readonly RaceResult[],
   riders: readonly RiderState[],
   onRestart: () => void,
+  onReplay: () => void,
 ): void {
   const rows = results
     .map((res) => {
@@ -89,10 +99,12 @@ export function renderResultsScreen(
       </table>
       <div class="options">
         <button class="primary" id="restart-btn">Jeszcze raz</button>
+        <button id="replay-btn">Obejrzyj powtórkę</button>
       </div>
     </div>
   `;
   overlay.querySelector('#restart-btn')?.addEventListener('click', onRestart);
+  overlay.querySelector('#replay-btn')?.addEventListener('click', onReplay);
 }
 
 export function clearOverlay(overlay: HTMLElement): void {

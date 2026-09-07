@@ -291,12 +291,19 @@ Każdy etap kończy się działającą, wypchniętą wersją. „Done” = testy
 | **M4** ✅ | AI | 3 realnie różne poziomy botów (zasięg przewidywania, siła unikania kolizji, linia przejazdu), wybór poziomu w ekranie startu | każda kombinacja poziomów (w tym sam na sam z tej samej klasy) kończy bieg — pokryte testem regresyjnym `ai-race.test.ts` | 2 sesje |
 | **M5** | Edytor torów | rysowanie band, sektory, walidacja, import/eksport, 4–6 torów | tor narysowany w edytorze da się przejechać | 2 sesje |
 | **M6** | Mecz i liga | program 15 biegów, protokół, tabela, zapis stanu | rozegrany pełny mecz z podsumowaniem | 2 sesje |
-| **M7** | Szlify | animacje, dźwięki, mobile, powtórki, ustawienia, samouczek | gra jest przyjemna dla kogoś, kto widzi ją pierwszy raz | 1–2 sesje |
+| **M7** ✅ | Szlify | dźwięk (syntezowany Web Audio, bez plików), sterowanie dotykowe, ślad ruchu i pulsowanie przy upadku, powtórka biegu, wyciszenie, samouczek na starcie | gra jest przyjemna dla kogoś, kto widzi ją pierwszy raz | 1–2 sesje |
 | **M8** | Online (opcja) | serwer WS lub gra korespondencyjna | dwie osoby grają z dwóch komputerów | 3+ sesje |
 
 Ścieżka do „gra się fajnie” (**M0 → M1 → M2 → M3 → M4**) jest zamknięta — gra jest grywalna
-od początku do końca, z botami i wynikami. Dalej: M5 (edytor torów, bo jeden tor szybko się
-znudzi) albo M7 (szlify), w zależności co bardziej przybliża do „chcę w to jeszcze zagrać”.
+od początku do końca, z botami i wynikami. M7 (szlify) też zamknięte: dźwięk, dotyk, ślad
+ruchu, powtórka, samouczek — działa i zweryfikowane w przeglądarce (desktop + telefon).
+
+**Świadomie poza zakresem M7:** powtórka nie ma suwaka (tylko odtwórz/zamknij — przewijanie
+to osobna, większa funkcja), brak regulacji głośności (tylko wł./wył.), dźwięk silnika gra
+tylko dla graczy-ludzi (nie dla botów, żeby nie było kakofonii przy 4 silnikach). Jeden tor
+wciąż jest jedyny — to M5.
+
+Dalej: **M5 (edytor torów)** — jeden tor szybko się znudzi, to teraz najbardziej odczuwalny brak.
 
 ---
 

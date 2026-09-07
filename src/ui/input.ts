@@ -11,7 +11,12 @@ export const PLAYER_CONTROLS: readonly ControlScheme[] = [
   { label: 'A / D', left: 'KeyA', right: 'KeyD' },
 ];
 
-/** Śledzi wciśnięte klawisze i przelicza je na sterowanie (-1/0/1) per gracz. */
+/**
+ * Śledzi wciśnięte klawisze/dotyk i przelicza je na sterowanie (-1/0/1) per gracz.
+ * Klawiatura i przyciski dotykowe (ui/touch.ts) współdzielą ten sam zbiór "wciśniętych"
+ * kodów (te same stringi co `ControlScheme.left/right`), więc dla silnika gry nie ma
+ * różnicy, skąd przyszedł input.
+ */
 export class KeyboardInput {
   private readonly pressed = new Set<string>();
   private readonly onKeyDown = (e: KeyboardEvent): void => {
@@ -36,6 +41,14 @@ export class KeyboardInput {
     if (left && !right) return -1;
     if (right && !left) return 1;
     return 0;
+  }
+
+  press(code: string): void {
+    this.pressed.add(code);
+  }
+
+  release(code: string): void {
+    this.pressed.delete(code);
   }
 
   dispose(): void {
