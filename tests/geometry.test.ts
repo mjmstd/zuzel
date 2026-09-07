@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { add, angleDiff, approach, clamp, distance, fromAngle, normalizeAngle, sub } from '../src/engine/geometry.ts';
+import {
+  add,
+  angleDiff,
+  approach,
+  clamp,
+  closestPointsSegmentSegment,
+  distance,
+  fromAngle,
+  normalizeAngle,
+  sub,
+} from '../src/engine/geometry.ts';
 
 describe('geometry', () => {
   it('add/sub są odwrotnościami', () => {
@@ -45,5 +55,38 @@ describe('geometry', () => {
     expect(clamp(5, 0, 10)).toBe(5);
     expect(clamp(-1, 0, 10)).toBe(0);
     expect(clamp(11, 0, 10)).toBe(10);
+  });
+
+  describe('closestPointsSegmentSegment', () => {
+    it('dla równoległych odcinków daje odległość prostopadłą', () => {
+      const r = closestPointsSegmentSegment({ x: -1, y: 0 }, { x: 1, y: 0 }, { x: -1, y: 2 }, { x: 1, y: 2 });
+      expect(r.distance).toBeCloseTo(2, 10);
+    });
+
+    it('dla przecinających się odcinków odległość wynosi 0', () => {
+      const r = closestPointsSegmentSegment({ x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 });
+      expect(r.distance).toBeCloseTo(0, 10);
+    });
+
+    it('dla współliniowych, nienachodzących odcinków liczy lukę między końcami', () => {
+      const r = closestPointsSegmentSegment({ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 });
+      expect(r.distance).toBeCloseTo(1, 10);
+    });
+
+    it('dla prostopadłych, mijających się odcinków (najbliżej są końce)', () => {
+      // Odcinek 1: pozioma kreska daleko z boku. Odcinek 2: pionowa kreska gdzie indziej.
+      const r = closestPointsSegmentSegment({ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 5, y: 5 }, { x: 5, y: 8 });
+      expect(r.distance).toBeCloseTo(distance({ x: 1, y: 0 }, { x: 5, y: 5 }), 10);
+    });
+
+    it('jest symetryczna względem kolejności odcinków', () => {
+      const p1 = { x: -1, y: 0 };
+      const q1 = { x: 1, y: 0.3 };
+      const p2 = { x: 0, y: 2 };
+      const q2 = { x: 2, y: 3 };
+      const a = closestPointsSegmentSegment(p1, q1, p2, q2);
+      const b = closestPointsSegmentSegment(p2, q2, p1, q1);
+      expect(a.distance).toBeCloseTo(b.distance, 10);
+    });
   });
 });

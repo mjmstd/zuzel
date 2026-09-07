@@ -1,9 +1,14 @@
-# Zasady gry — specyfikacja robocza (v0.2 — model real-time)
+# Zasady gry — specyfikacja robocza (v0.3 — motocykl, poślizg, kapsuła)
 
 Zmiana względem v0.1: mechanika **nie jest turowa**. Zawodnik jedzie sam do przodu,
 gracz steruje wyłącznie kierunkiem (lewo/prawo), jak w klasycznym *Żużlu 2001*.
 Prędkość jest pochodną fizyki — gaz jest automatyczny, karą za zbyt ostry skręt
 przy dużej prędkości jest utrata przyczepności (wypadnięcie za bandę).
+
+Zmiana względem v0.2: motocykl żużlowy jeździ **bez hamulców** i pokonuje łuki
+**bokiem** (broadside/poślizg) — to teraz osobno modelowane, nie tylko sugerowane
+przez spowolnienie w zakręcie. Zawodnik ma kształt wydłużonej kapsuły (motocykl +
+kierowca), nie kulki — kolizje i wygląd to odzwierciedlają.
 
 ## 1. Tor
 
@@ -17,49 +22,89 @@ reprezentację z siatką segmentów, opisaną w `TRACK_FORMAT.md`.
 ## 2. Zawodnik — stan
 
 ```
-position: Vec2       // pozycja w świecie (metry/jednostki)
-heading:  number      // kąt jazdy, radiany
-speed:    number       // prędkość skalarna, jednostki/s
+position:      Vec2    // pozycja w świecie (metry/jednostki)
+heading:       number  // orientacja NADWOZIA motocykla (rysowanie, hitbox)
+velocityAngle: number  // FAKTYCZNY kierunek jazdy (napędza position)
+speed:         number  // prędkość skalarna, jednostki/s
 ```
+
+`heading` i `velocityAngle` to dwa różne kąty — patrz §4. Gdy zawodnik jedzie prosto,
+są sobie równe; w zakręcie przy prędkości rozjeżdżają się (poślizg).
 
 ## 3. Sterowanie
 
 Jedyny input gracza w każdej klatce: `steer ∈ {-1, 0, 1}` (skręt w lewo / prosto / w prawo).
-Gaz jest automatyczny — silnik zawsze „ciągnie” w stronę prędkości maksymalnej.
+Gaz jest automatyczny — silnik zawsze „ciągnie” w stronę prędkości maksymalnej. Motocykl
+żużlowy **nie ma hamulca** — nie ma osobnego inputu do zwalniania, prędkość spada sama,
+gdy aktywnie skręcasz (patrz `cornerSpeed` niżej).
 
 ## 4. Fizyka (krok o stałym `dt`)
 
 ```
-angularVelocity = steer * TURN_RATE * grip(speed)
-heading        += angularVelocity * dt
+grip            = gripAt(speed)                    // maleje z prędkością
+angularVelocity = steer * TURN_RATE * grip
+velocityAngle  += angularVelocity * dt              // to jest FIZYCZNY tor jazdy
 
 targetSpeed     = steer != 0 ? CORNER_SPEED : MAX_SPEED
 speed           = approach(speed, targetSpeed, ACCEL, BRAKE, dt)
 
-velocity        = (cos(heading), sin(heading)) * speed
-position        += velocity * dt
+slipAngle       = steer * MAX_SLIP_ANGLE * (1 - grip)
+heading         = velocityAngle + slipAngle          // nadwozie, tylko do rysowania/hitboxa
+
+position       += (cos(velocityAngle), sin(velocityAngle)) * speed * dt
 ```
 
+- **`velocityAngle` jest jedynym kątem, który napędza pozycję** — to jest dokładnie ta sama
+  formuła co dawny (v0.2) `heading`, więc balans jazdy (ile trzeba zwolnić przed łukiem)
+  się nie zmienił.
+- **`heading` jest pochodną**, używaną tylko do rysowania motocykla i orientacji jego
+  hitboxa (§6). Odchyla się od `velocityAngle` o `slipAngle`, który rośnie z prędkością
+  (mniejszy `grip`) — to jest wizualny **broadside**: motocykl żużlowy jeździ bez hamulca,
+  więc w szybkim zakręcie tylne koło się ślizga, a nadwozie jest odchylone od
+  faktycznego toru jazdy. Przy `steer = 0` (jazda na wprost) `slipAngle = 0` — poślizg
+  pojawia się tylko podczas aktywnego skręcania, nie w każdej chwili.
 - `grip(speed)` maleje z prędkością — przy dużej prędkości skręt jest wolniejszy (opór
-  przyczepności), co wymusza wcześniejsze „ściąganie” przed łukiem, tak jak w oryginale.
+  przyczepności), co wymusza wcześniejsze „ściąganie” przed łukiem.
 - `CORNER_SPEED < MAX_SPEED` — jazda na pełnym gazie w skręcie jest niemożliwa do
   utrzymania w granicach toru; kto nie zwolni, wypada.
 - Wszystkie stałe (`TURN_RATE`, `MAX_SPEED`, `CORNER_SPEED`, `ACCEL`, `BRAKE`,
-  szerokość toru) w jednym miejscu (`engine/config.ts`) — do strojenia. **[do wyważenia
-  po pierwszych testach z Tobą]**
+  `MAX_SLIP_ANGLE`, szerokość toru) w jednym miejscu (`engine/config.ts`) — do strojenia.
+  **[do wyważenia po pierwszych testach z Tobą]**
 
 ## 5. Banda i upadek
 
-Po każdym kroku liczymy `(s, offset)` = pozycja zawodnika względem osi toru.
-Jeśli `|offset| > szerokość/2` → zawodnik jest za bandą → **upadek**:
-prędkość spada do 0, zawodnik traci `CRASH_PENALTY` sekund (domyślnie 1,5 s) zanim
-znów może przyspieszać, wraca na ostatnią pozycję na torze.
+Po każdym kroku liczymy `(s, offset)` = pozycja zawodnika (środek kapsuły) względem osi
+toru. Jeśli `|offset| > szerokość/2` → zawodnik jest za bandą → **upadek**.
+
+Każdy upadek (za bandę **lub** przez kolizję, §6) robi to samo:
+1. prędkość spada do 0 na `CRASH_PENALTY` sekund (domyślnie 1,5 s),
+2. **`heading` i `velocityAngle` są ustawiane z powrotem na styczną toru** w bieżącym `s` —
+   zawodnik wstaje zwrócony wzdłuż toru, nie pod przypadkowym kątem sprzed upadku.
+   Bez tego (2) zawodnik wybudzony z kary jechałby dalej pod tym samym złym kątem, aż
+   prędzej czy później znów by wypadł, w kółko — z zewnątrz wyglądałoby to jak
+   utknięcie w miejscu na resztę biegu, mimo że technicznie to ciąg osobnych upadków,
+3. przy upadku za bandę dodatkowo: boczne odchylenie jest przycinane z powrotem do
+   legalnego zakresu (zawodnik wraca na powierzchnię toru).
 
 ## 6. Kolizje
 
-Jeśli odległość między dwoma zawodnikami spadnie poniżej `2 × promień_zawodnika`
-→ kolizja: obaj tracą prędkość (jak przy upadku). Wariant „duchy” (bez kolizji)
-dostępny jako opcja konfiguracji do testów.
+Zawodnik to nie kulka, tylko **kapsuła**: odcinek nos–ogon o długości `riderLength`
+wzdłuż `heading`, otoczony promieniem `riderWidth / 2`. Dwaj zawodnicy zderzają się,
+gdy najkrótsza odległość między ich odcinkami spadnie poniżej sumy promieni (czyli
+`riderWidth`, gdy oba mają tę samą szerokość) — **nie** gdy środki są blisko. Konsekwencja:
+jadąc równolegle blisko obok siebie można się bezpiecznie minąć (wąska kapsuła), ale
+najechanie na tył kogoś wymaga więcej zapasu wzdłuż toru (długa kapsuła) — inaczej niż
+przy okrągłym hitboksie, gdzie kierunek zbliżenia nie miał znaczenia.
+
+Przy kolizji: obaj tracą prędkość jak przy upadku (§5, punkty 1–2), a ich pozycje są
+natychmiast rozsuwane na dokładnie minimalną odległość wzdłuż linii łączącej najbliższe
+punkty kapsuł (żeby dwaj zawodnicy stojący w miejscu nie zostali nakładający się na
+zawsze). Dodatkowo każdy upadek daje krótkie okno **nietykalności na nową kolizję**
+(`COLLISION_IMMUNITY` sekund, domyślnie 0,5 s, licząc od końca kary ruchowej) — zawodnik,
+który właśnie wstał tuż obok kogoś, ma realny czas żeby odjechać, zanim znowu może dostać
+karę za kolizję. Bez tego dwaj zawodnicy potrafili wymieniać się karami do końca biegu.
+
+Wariant „duchy” (bez kolizji) dostępny jako opcja konfiguracji do testów.
 
 ## 7. Okrążenia i meta
 
@@ -89,9 +134,14 @@ interface RaceConfig {
   cornerSpeed: number;      // < maxSpeed
   accel: number;
   brake: number;
-  turnRate: number;         // rad/s przy steer=1, prędkość=0
-  crashPenaltySeconds: number; // 1.5
+  turnRate: number;         // rad/s przy steer=1, grip=1
+  minGrip: number;
+  gripSpeedFalloff: number;
+  maxSlipAngle: number;     // rad, kąt poślizgu (heading vs velocityAngle) przy grip=0
+  crashPenaltySeconds: number;    // 1.5
+  collisionImmunitySeconds: number; // 0.5, ponad crashPenaltySeconds
   collisionMode: 'ghost' | 'solid';
-  riderRadius: number;
+  riderLength: number;      // pełna długość kapsuły (nos–ogon)
+  riderWidth: number;       // pełna szerokość kapsuły
 }
 ```

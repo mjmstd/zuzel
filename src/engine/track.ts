@@ -154,8 +154,8 @@ export function pointWithOffset(track: OvalTrack, s: number, offset: number): Tr
 }
 
 /** Pozycja startowa w torze `laneIndex` (0-based) z `laneCount` dostępnych, przy dystansie `s`. */
-export function startPoint(track: OvalTrack, cfg: { riderRadius: number }, s: number, laneIndex: number, laneCount: number): TrackPoint {
-  const usableWidth = track.def.width - cfg.riderRadius * 2;
+export function startPoint(track: OvalTrack, cfg: { riderWidth: number }, s: number, laneIndex: number, laneCount: number): TrackPoint {
+  const usableWidth = track.def.width - cfg.riderWidth;
   const spacing = laneCount > 1 ? usableWidth / (laneCount - 1) : 0;
   const offset = laneCount > 1 ? -usableWidth / 2 + spacing * laneIndex : 0;
   return pointWithOffset(track, s, offset);

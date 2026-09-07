@@ -13,9 +13,12 @@ export const defaultRaceConfig: RaceConfig = {
   turnRate: 2.6,
   minGrip: 0.35,
   gripSpeedFalloff: 0.02,
+  maxSlipAngle: 0.9,
   crashPenaltySeconds: 1.5,
+  collisionImmunitySeconds: 0.5,
   collisionMode: 'solid',
-  riderRadius: 0.9,
+  riderLength: 2.6,
+  riderWidth: 1.0,
 };
 
 export const defaultTrack: OvalTrackDef = {

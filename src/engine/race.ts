@@ -28,12 +28,14 @@ export function createInitialState(track: OvalTrack, cfg: RaceConfig, specs: rea
       name: spec.name,
       position,
       heading,
+      velocityAngle: heading,
       speed: 0,
       s: startS,
       offset: 0,
       lap: 0,
       sectorIndex: 0,
       crashedUntil: 0,
+      collisionImmuneUntil: 0,
       finished: false,
       finishTime: null,
     };
@@ -60,7 +62,7 @@ export function tick(state: RaceState, track: OvalTrack, cfg: RaceConfig, inputs
     next = withTrackProjection(next, track);
 
     if (isOffTrack(next, track)) {
-      return applyCrash(recoverOntoTrack(next, track), time, cfg);
+      return applyCrash(recoverOntoTrack(next, track), time, cfg, track);
     }
 
     next = updateLap(next, track);
@@ -70,7 +72,7 @@ export function tick(state: RaceState, track: OvalTrack, cfg: RaceConfig, inputs
     return next;
   });
 
-  riders = resolveCollisions(riders, cfg, time);
+  riders = resolveCollisions(riders, cfg, time, track);
 
   const allFinished = riders.every((r) => r.finished);
   const status = allFinished ? 'finished' : 'running';

@@ -77,7 +77,10 @@ export function chooseSteer(
   const desired = add(pursue, scale(avoid, weight));
 
   const targetAngle = Math.atan2(desired.y, desired.x);
-  const diff = angleDiff(rider.heading, targetAngle);
+  // Do sterowania liczy się faktyczny tor jazdy (velocityAngle), nie odchylone
+  // poślizgiem nadwozie (heading) — inaczej bot "widziałby" siebie skierowanego
+  // gdzie indziej niż faktycznie jedzie i myliłby się w zakrętach.
+  const diff = angleDiff(rider.velocityAngle, targetAngle);
 
   if (diff > DEAD_ZONE) return 1;
   if (diff < -DEAD_ZONE) return -1;

@@ -58,22 +58,30 @@ Pełna specyfikacja fizyki, band, kolizji i okrążeń: **`docs/RULES.md`** — 
 
 ### 2.1 Sterowanie i fizyka
 
-Jedyny input gracza: `steer ∈ {-1, 0, 1}`. Gaz automatyczny. Co klatkę fizyki:
+Jedyny input gracza: `steer ∈ {-1, 0, 1}`. Gaz automatyczny — motocykl żużlowy nie ma
+hamulca. Co klatkę fizyki:
 
 ```
 angularVelocity = steer * TURN_RATE * grip(speed)
-heading        += angularVelocity * dt
+velocityAngle  += angularVelocity * dt        // faktyczny tor jazdy — napędza pozycję
 
 targetSpeed     = steer != 0 ? CORNER_SPEED : MAX_SPEED
 speed           = approach(speed, targetSpeed, ACCEL, BRAKE, dt)
 
-position       += (cos(heading), sin(heading)) * speed * dt
+slipAngle       = steer * MAX_SLIP_ANGLE * (1 - grip)
+heading         = velocityAngle + slipAngle    // nadwozie — tylko rysowanie i hitbox
+
+position       += (cos(velocityAngle), sin(velocityAngle)) * speed * dt
 ```
 
 `grip(speed)` maleje z prędkością — im szybciej jedziesz, tym wolniej skręcasz.
 `CORNER_SPEED < MAX_SPEED`, więc pełny gaz w łuku jest fizycznie niemożliwy do
 utrzymania na torze — trzeba wcześniej „ściągnąć”, dokładnie ten moment decyzji
-jest sercem gry. Stałe fizyki w jednym miejscu (`engine/config.ts`), do wyważenia.
+jest sercem gry. `heading` i `velocityAngle` to dwa różne kąty: bez hamulca motocykl
+żużlowy pokonuje szybkie łuki bokiem (broadside), więc nadwozie (`heading`, do rysowania)
+odchyla się od faktycznego toru jazdy (`velocityAngle`, napędza pozycję) — to
+`slipAngle`, rosnący z prędkością. Pełne wyjaśnienie i uzasadnienie: `docs/RULES.md` §4.
+Stałe fizyki w jednym miejscu (`engine/config.ts`), do wyważenia.
 
 ### 2.2 Tor jako krzywa parametryczna
 
@@ -91,8 +99,13 @@ pozycję na torze.
 
 ### 2.4 Kolizje między zawodnikami
 
-Domyślnie: dwóch zawodników bliżej siebie niż `2 × promień_zawodnika` → kolizja,
-obaj tracą prędkość jak przy upadku. Tryb „duchy” (bez kolizji) jako opcja do testów.
+Zawodnik to nie kulka, tylko **kapsuła** (odcinek nos-ogon wzdłuż `heading`, otoczony
+promieniem `riderWidth/2`) — dwaj zawodnicy zderzają się, gdy najkrótsza odległość
+między ich kapsułami spadnie poniżej sumy promieni, nie gdy środki są blisko. Obaj
+tracą prędkość jak przy upadku, a ich pozycje są od razu rozsuwane na minimalną
+odległość. Każdy upadek (kolizja lub banda) dodatkowo daje krótkie okno nietykalności
+na nową kolizję — bez tego dwaj zawodnicy potrafili wymieniać się karami do końca
+biegu. Tryb „duchy” (bez kolizji) jako opcja do testów. Szczegóły: `docs/RULES.md` §6.
 
 ### 2.5 Okrążenia i meta
 
@@ -167,16 +180,19 @@ zamiast osobnym modelem.
 ### 5.1 Krok fizyki
 
 ```ts
-function stepRider(rider: RiderState, input: Steer, track: OvalTrack, cfg: RaceConfig, dt: number): RiderState {
+function stepRider(rider: RiderState, steer: Steer, cfg: RaceConfig, dt: number): RiderState {
   const grip = gripAt(rider.speed, cfg);
-  const angularVelocity = input * cfg.turnRate * grip;
-  const heading = rider.heading + angularVelocity * dt;
+  const angularVelocity = steer * cfg.turnRate * grip;
+  const velocityAngle = rider.velocityAngle + angularVelocity * dt; // faktyczny tor jazdy
 
-  const targetSpeed = input !== 0 ? cfg.cornerSpeed : cfg.maxSpeed;
+  const targetSpeed = steer !== 0 ? cfg.cornerSpeed : cfg.maxSpeed;
   const speed = approach(rider.speed, targetSpeed, cfg.accel, cfg.brake, dt);
 
-  const position = add(rider.position, scale(fromAngle(heading), speed * dt));
-  return { ...rider, heading, speed, position };
+  const slipAngle = steer * cfg.maxSlipAngle * (1 - grip);
+  const heading = velocityAngle + slipAngle; // nadwozie — rysowanie i hitbox
+
+  const position = add(rider.position, scale(fromAngle(velocityAngle), speed * dt));
+  return { ...rider, heading, velocityAngle, speed, position };
 }
 ```
 
@@ -251,7 +267,9 @@ Test `tests/ai-race.test.ts` przejeżdża pełny bieg dla każdej kombinacji poz
 ## 8. UI/UX
 
 - **Tor** rysowany jako owal z lotu ptaka: banda zewnętrzna i wewnętrzna, linia
-  startu/mety, zawodnicy jako strzałki w kolorach kasków (kierunek = heading).
+  startu/mety, zawodnicy jako motocykl z zawodnikiem w kolorach zespołu (dwie opony,
+  wydłużona rama, sylwetka kierowcy przesunięta w bok o bieżący kąt poślizgu —
+  widać "wywieszanie się" z motocykla w zakręcie, obrót = `heading`).
 - **Sterowanie:** klawiatura, różne klawisze per gracz w hot-seat (§ w `RULES.md`),
   na mobile dwa duże przyciski lewo/prawo po bokach ekranu.
 - **HUD:** okrążenie / limit, aktualna kolejność, kto jest kim (kolor + nazwa),

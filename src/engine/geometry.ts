@@ -62,3 +62,60 @@ export function approach(current: number, target: number, riseRate: number, fall
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
+
+export interface SegmentDistanceResult {
+  readonly pointOnFirst: Vec2;
+  readonly pointOnSecond: Vec2;
+  readonly distance: number;
+}
+
+const SEGMENT_EPS = 1e-9;
+
+/**
+ * Najkrótszy dystans między dwoma odcinkami [p1,q1] i [p2,q2] oraz punkty, w których
+ * ten dystans występuje. Standardowy algorytm (Ericson, "Real-Time Collision
+ * Detection", closestPtSegmentSegment) — używany do kolizji kapsuła-kapsuła
+ * (motocykl z zawodnikiem to odcinek nos-ogon + promień), bo zwykła odległość
+ * środek-środek nie ma sensu dla wydłużonego kształtu.
+ */
+export function closestPointsSegmentSegment(p1: Vec2, q1: Vec2, p2: Vec2, q2: Vec2): SegmentDistanceResult {
+  const d1 = sub(q1, p1);
+  const d2 = sub(q2, p2);
+  const r = sub(p1, p2);
+  const a = dot(d1, d1);
+  const e = dot(d2, d2);
+  const f = dot(d2, r);
+
+  let s: number;
+  let t: number;
+
+  if (a <= SEGMENT_EPS && e <= SEGMENT_EPS) {
+    s = 0;
+    t = 0;
+  } else if (a <= SEGMENT_EPS) {
+    s = 0;
+    t = clamp(f / e, 0, 1);
+  } else {
+    const c = dot(d1, r);
+    if (e <= SEGMENT_EPS) {
+      t = 0;
+      s = clamp(-c / a, 0, 1);
+    } else {
+      const b = dot(d1, d2);
+      const denom = a * e - b * b;
+      s = denom > SEGMENT_EPS ? clamp((b * f - c * e) / denom, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+
+  const pointOnFirst = add(p1, scale(d1, s));
+  const pointOnSecond = add(p2, scale(d2, t));
+  return { pointOnFirst, pointOnSecond, distance: distance(pointOnFirst, pointOnSecond) };
+}

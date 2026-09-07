@@ -98,12 +98,12 @@ describe('sectorIndex', () => {
 
 describe('startPoint', () => {
   it('rozstawia zawodników w równych odstępach w granicach szerokości toru', () => {
-    const cfg = { riderRadius: 0.9 };
+    const cfg = { riderWidth: 1.0 };
     const laneCount = 4;
     const positions = Array.from({ length: laneCount }, (_, i) => startPoint(track, cfg, 5, i, laneCount));
     for (const p of positions) {
       const proj = nearestOnTrack(track, p.position);
-      expect(Math.abs(proj.offset)).toBeLessThanOrEqual(def.width / 2 - cfg.riderRadius + 1e-6);
+      expect(Math.abs(proj.offset)).toBeLessThanOrEqual(def.width / 2 - cfg.riderWidth / 2 + 1e-6);
     }
     // skrajne pozycje są symetryczne względem osi
     const first = nearestOnTrack(track, positions[0]!.position);
