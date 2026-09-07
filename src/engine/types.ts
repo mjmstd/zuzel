@@ -8,15 +8,21 @@ export type Steer = -1 | 0 | 1;
 
 export interface RaceConfig {
   laps: number;
+  /** Motocykl żużlowy nie ma hamulca — silnik zawsze ciągnie w stronę tej prędkości. */
   maxSpeed: number;
-  cornerSpeed: number;
   accel: number;
-  brake: number;
   turnRate: number;
   minGrip: number;
   gripSpeedFalloff: number;
   /** Maksymalny kąt poślizgu (rad) między nadwoziem a torem jazdy przy zerowym grip. */
   maxSlipAngle: number;
+  /**
+   * Siła oporu od poślizgu (1/(s·rad)) — jedyne źródło spowolnienia w zakręcie, bo nie
+   * ma hamulca. Ubytek prędkości na sekundę = `corneringDrag * |kąt poślizgu| * speed`,
+   * czyli proporcjonalny do bieżącej prędkości, nie skok do stałego celu — im bardziej
+   * rozpędzony motocykl, tym więcej ma pędu do rozproszenia, więc zwalnia stopniowo.
+   */
+  corneringDrag: number;
   crashPenaltySeconds: number;
   /** Dodatkowe okno nietykalności na kolizje po wybudzeniu z kary — patrz rules.ts. */
   collisionImmunitySeconds: number;

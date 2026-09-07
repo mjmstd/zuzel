@@ -41,7 +41,7 @@ describe('stepRider', () => {
     expect(rider.speed).toBeCloseTo(defaultRaceConfig.maxSpeed, 5);
   });
 
-  it('skręt (steer=1) zwiększa heading i celuje w cornerSpeed', () => {
+  it('skręt (steer=1) zwiększa heading i spowalnia przez opór poślizgu', () => {
     let rider = makeRider({ speed: defaultRaceConfig.maxSpeed });
     const next = stepRider(rider, 1, defaultRaceConfig, 0.1);
     expect(next.heading).toBeGreaterThan(0);
@@ -97,5 +97,32 @@ describe('poślizg (heading vs velocityAngle)', () => {
     const rider = makeRider({ speed: 0, heading: 0, velocityAngle: 0 });
     const next = stepRider(rider, 1, defaultRaceConfig, 1 / 60);
     expect(next.heading).toBeCloseTo(next.velocityAngle, 10);
+  });
+});
+
+describe('brak hamulca — spowolnienie w zakręcie to opór poślizgu, nie skok do celu', () => {
+  it('przy stałym skręcie prędkość spada płynnie klatka po klatce, bez skoku', () => {
+    let rider = makeRider({ speed: defaultRaceConfig.maxSpeed, heading: 0, velocityAngle: 0 });
+    let prevSpeed = rider.speed;
+    for (let i = 0; i < 30; i++) {
+      rider = stepRider(rider, 1, defaultRaceConfig, 1 / 60);
+      // Żaden pojedynczy krok fizyki nie ścina prędkości gwałtownie — to nie hamulec.
+      expect(prevSpeed - rider.speed).toBeLessThan(defaultRaceConfig.maxSpeed * 0.1);
+      prevSpeed = rider.speed;
+    }
+    // Ale po chwili trwałego skrętu prędkość faktycznie zauważalnie spadła.
+    expect(rider.speed).toBeLessThan(defaultRaceConfig.maxSpeed * 0.85);
+  });
+
+  it('bardzo rozpędzony motocykl traci prędkość w zakręcie, wolny może nawet przyspieszać', () => {
+    // To jest sedno: ubytek prędkości zależy od bieżącego pędu, nie od jednego stałego
+    // celu ("corner speed") — więc przy tym samym skręcie szybki motocykl zwalnia,
+    // a wolny (poniżej naturalnego punktu równowagi silnik/poślizg) wciąż przyspiesza.
+    const fast = makeRider({ speed: 30, heading: 0, velocityAngle: 0 });
+    const slow = makeRider({ speed: 10, heading: 0, velocityAngle: 0 });
+    const nextFast = stepRider(fast, 1, defaultRaceConfig, 1 / 60);
+    const nextSlow = stepRider(slow, 1, defaultRaceConfig, 1 / 60);
+    expect(nextFast.speed).toBeLessThan(fast.speed);
+    expect(nextSlow.speed).toBeGreaterThan(slow.speed);
   });
 });

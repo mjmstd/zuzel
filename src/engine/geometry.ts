@@ -45,20 +45,6 @@ export function angleDiff(from: number, to: number): number {
   return normalizeAngle(to - from);
 }
 
-/**
- * Przesuwa `current` w stronę `target` z osobnym tempem dla wzrostu i spadku.
- * Używane zarówno dla prędkości (accel/brake) jak i innych wielkości skalarnych.
- */
-export function approach(current: number, target: number, riseRate: number, fallRate: number, dt: number): number {
-  if (current < target) {
-    return Math.min(target, current + riseRate * dt);
-  }
-  if (current > target) {
-    return Math.max(target, current - fallRate * dt);
-  }
-  return current;
-}
-
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

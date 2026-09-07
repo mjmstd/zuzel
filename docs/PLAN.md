@@ -65,22 +65,27 @@ hamulca. Co klatkę fizyki:
 angularVelocity = steer * TURN_RATE * grip(speed)
 velocityAngle  += angularVelocity * dt        // faktyczny tor jazdy — napędza pozycję
 
-targetSpeed     = steer != 0 ? CORNER_SPEED : MAX_SPEED
-speed           = approach(speed, targetSpeed, ACCEL, BRAKE, dt)
-
 slipAngle       = steer * MAX_SLIP_ANGLE * (1 - grip)
 heading         = velocityAngle + slipAngle    // nadwozie — tylko rysowanie i hitbox
+
+accelerated     = min(MAX_SPEED, speed + ACCEL * dt)   // silnik zawsze ciągnie w górę
+dragRate        = CORNERING_DRAG * |slipAngle|          // jedyne źródło zwolnienia
+speed           = max(0, accelerated * (1 - dragRate * dt))
 
 position       += (cos(velocityAngle), sin(velocityAngle)) * speed * dt
 ```
 
-`grip(speed)` maleje z prędkością — im szybciej jedziesz, tym wolniej skręcasz.
-`CORNER_SPEED < MAX_SPEED`, więc pełny gaz w łuku jest fizycznie niemożliwy do
-utrzymania na torze — trzeba wcześniej „ściągnąć”, dokładnie ten moment decyzji
-jest sercem gry. `heading` i `velocityAngle` to dwa różne kąty: bez hamulca motocykl
-żużlowy pokonuje szybkie łuki bokiem (broadside), więc nadwozie (`heading`, do rysowania)
-odchyla się od faktycznego toru jazdy (`velocityAngle`, napędza pozycję) — to
-`slipAngle`, rosnący z prędkością. Pełne wyjaśnienie i uzasadnienie: `docs/RULES.md` §4.
+Bez hamulca — nie ma żadnego „celu prędkości”, do którego zjeżdżamy przy skręcie
+(to był wcześniejszy, mniej realny projekt: sztywne `cornerSpeed`). Silnik zawsze
+ciągnie w stronę `MAX_SPEED`; jedyne, co zwalnia w zakręcie, to opór od poślizgu,
+proporcjonalny do bieżącej prędkości i do tego, jak bardzo motocykl się ślizga —
+więc bardzo rozpędzony motocykl traci prędkość stopniowo (ma więcej pędu do
+rozproszenia), a przy dość niskiej prędkości może nawet przyspieszać w trakcie
+skrętu. `grip(speed)` maleje z prędkością — im szybciej jedziesz, tym wolniej skręcasz
+i tym większy poślizg. `heading` i `velocityAngle` to dwa różne kąty: bez hamulca
+motocykl żużlowy pokonuje szybkie łuki bokiem (broadside), więc nadwozie (`heading`,
+do rysowania) odchyla się od faktycznego toru jazdy (`velocityAngle`, napędza pozycję)
+— to `slipAngle`, rosnący z prędkością. Pełne wyjaśnienie i uzasadnienie: `docs/RULES.md` §4.
 Stałe fizyki w jednym miejscu (`engine/config.ts`), do wyważenia.
 
 ### 2.2 Tor jako krzywa parametryczna
@@ -185,20 +190,24 @@ function stepRider(rider: RiderState, steer: Steer, cfg: RaceConfig, dt: number)
   const angularVelocity = steer * cfg.turnRate * grip;
   const velocityAngle = rider.velocityAngle + angularVelocity * dt; // faktyczny tor jazdy
 
-  const targetSpeed = steer !== 0 ? cfg.cornerSpeed : cfg.maxSpeed;
-  const speed = approach(rider.speed, targetSpeed, cfg.accel, cfg.brake, dt);
-
   const slipAngle = steer * cfg.maxSlipAngle * (1 - grip);
   const heading = velocityAngle + slipAngle; // nadwozie — rysowanie i hitbox
+
+  // Bez hamulca: silnik zawsze ciągnie w górę, jedyne zwolnienie to opór od poślizgu
+  // (proporcjonalny do bieżącej prędkości — bardziej rozpędzony motocykl zwalnia stopniowo).
+  const accelerated = Math.min(cfg.maxSpeed, rider.speed + cfg.accel * dt);
+  const dragRate = cfg.corneringDrag * Math.abs(slipAngle);
+  const speed = Math.max(0, accelerated * (1 - dragRate * dt));
 
   const position = add(rider.position, scale(fromAngle(velocityAngle), speed * dt));
   return { ...rider, heading, velocityAngle, speed, position };
 }
 ```
 
-`approach(current, target, accel, brake, dt)` przesuwa `current` w stronę `target`
-z osobnym tempem dla przyspieszania i hamowania — asymetria jest ważna: hamowanie
-przed łukiem musi być szybsze niż rozpędzanie, inaczej sterowanie jest bez sensu.
+Motocykl żużlowy nie ma hamulca, więc nie ma tu osobnego „tempa hamowania” do
+strojenia — `dragRate` nie jest ustawianym parametrem tempa, tylko wyliczaną
+wielkością (zależną od `slipAngle` i `corneringDrag`), więc automatycznie skaluje
+się z tym, jak mocno i jak szybko akurat jedziesz.
 
 ### 5.2 Pozycja względem osi toru
 
@@ -355,9 +364,11 @@ Dalej: **M5 (edytor torów)** — jeden tor szybko się znudzi, to teraz najbard
    real-time, lewo/prawo** (jak *Żużel 2001*). Plan i `RULES.md` zaktualizowane.
 2. **Kolizje:** domyślnie „solid” (utrata prędkości przy kontakcie), z trybem „ghost”
    do testów — patrz `RULES.md` §6. Do ewentualnej korekty po pierwszej grze.
-3. **Stałe fizyki** (`maxSpeed`, `cornerSpeed`, `turnRate`, kara za upadek) — wartości
+3. **Stałe fizyki** (`maxSpeed`, `turnRate`, `corneringDrag`, kara za upadek) — wartości
    startowe w `engine/config.ts`, jawnie oznaczone jako **[do wyważenia]**; strojenie
-   po pierwszym grywalnym buildzie (M2), nie na sucho.
+   po pierwszym grywalnym buildzie (M2), nie na sucho. Po grze z Tobą usunięty sztywny
+   „cel prędkości” w zakręcie (`cornerSpeed`) na rzecz ciągłego oporu od poślizgu —
+   patrz `RULES.md` §4.
 4. **Upadek:** kara czasowa (1,5 s), nie wykluczenie z biegu — łagodniejsze, lepsze
    do testowania w pojedynkę. Wykluczenie jako opcja konfiguracji, jeśli okaże się
    bliższe oryginałowi.

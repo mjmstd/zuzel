@@ -86,14 +86,18 @@ export function drawTrail(ctx: CanvasRenderingContext2D, trail: readonly Vec2[],
 }
 
 const WHEEL_COLOR = '#161616';
-const RIDER_SUIT_COLOR = '#20242c';
+const WHEEL_RIM_COLOR = '#555';
+const HELMET_COLOR = '#f4f4f2';
+const BOOT_COLOR = '#161616';
 
 /**
- * Motocykl żużlowy z zawodnikiem, z lotu ptaka: dwie opony, wydłużona rama w kolorze
- * zawodnika (zorientowana wzdłuż `heading`, czyli nadwozia — nie faktycznego toru
- * jazdy), i sylwetka kierowcy przesunięta w bok o bieżący kąt poślizgu
- * (`heading` − `velocityAngle`), żeby było widać charakterystyczne dla żużla
- * "wywieszanie się" z motocykla podczas ślizgu w łuku.
+ * Motocykl żużlowy z zawodnikiem, z lotu ptaka: opony, wydłużona sylwetka nadwozia
+ * i kierowcy w kolorze zespołu (zorientowana wzdłuż `heading`, czyli nadwozia — nie
+ * faktycznego toru jazdy), biały kask, tabliczka na przedzie i wysunięta w bok stopa
+ * ("stalowy but") w skrętach — to jest charakterystyczna dla żużla technika: bez
+ * hamulca jedyny sposób na balans w ślizgu to opuszczona wewnętrzna noga.
+ * Kierowca jest przesunięty bocznie o bieżący kąt poślizgu (`heading` − `velocityAngle`),
+ * żeby było widać "wywieszanie się" z motocykla podczas ślizgu w łuku.
  */
 export function drawRider(ctx: CanvasRenderingContext2D, rider: RiderState, cfg: RaceConfig, camera: Camera, time: number): void {
   const p = worldToScreen(camera, rider.position);
@@ -114,50 +118,74 @@ export function drawRider(ctx: CanvasRenderingContext2D, rider: RiderState, cfg:
     ctx.globalAlpha = 1;
   }
 
+  const slip = angleDiff(rider.velocityAngle, rider.heading);
+  const lean = slip * halfWid * 1.3;
+
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(rider.heading);
   ctx.globalAlpha = crashed ? 0.55 : 1;
 
-  // Opony: tylna (napędowa, ślizgająca się) i przednia.
-  ctx.fillStyle = WHEEL_COLOR;
-  ctx.beginPath();
-  ctx.ellipse(-halfLen * 0.72, 0, halfWid * 0.5, halfWid * 0.3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(halfLen * 0.78, 0, halfWid * 0.46, halfWid * 0.28, 0, 0, Math.PI * 2);
-  ctx.fill();
+  // Wysunięta wewnętrzna stopa — widoczna tylko podczas realnego poślizgu, po stronie,
+  // w którą kierowca się "wywiesza". Rysowana pod nadwoziem, żeby noga jakby wystawała spod bikeu.
+  if (Math.abs(slip) > 0.015) {
+    const footSide = Math.sign(lean);
+    const footOut = footSide * halfWid * 1.15;
+    ctx.strokeStyle = BOOT_COLOR;
+    ctx.lineWidth = Math.max(1, halfWid * 0.16);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-halfLen * 0.05, footSide * halfWid * 0.3);
+    ctx.lineTo(halfLen * 0.12, footOut);
+    ctx.stroke();
+    ctx.fillStyle = BOOT_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(halfLen * 0.16, footOut, halfWid * 0.22, halfWid * 0.13, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // Rama: wydłużony sześciokąt w kolorze zawodnika.
+  // Nadwozie + sylwetka kierowcy jako jeden opływowy kształt (łuki, nie kanciasty
+  // sześciokąt) w kolorze zespołu.
   ctx.fillStyle = rider.color;
   ctx.beginPath();
   ctx.moveTo(halfLen, 0);
-  ctx.lineTo(halfLen * 0.35, -halfWid * 0.48);
-  ctx.lineTo(-halfLen * 0.55, -halfWid * 0.4);
-  ctx.lineTo(-halfLen, 0);
-  ctx.lineTo(-halfLen * 0.55, halfWid * 0.4);
-  ctx.lineTo(halfLen * 0.35, halfWid * 0.48);
+  ctx.quadraticCurveTo(halfLen * 0.55, -halfWid * 0.58, halfLen * 0.05, -halfWid * 0.52);
+  ctx.quadraticCurveTo(-halfLen * 0.55, -halfWid * 0.38, -halfLen, 0);
+  ctx.quadraticCurveTo(-halfLen * 0.55, halfWid * 0.38, halfLen * 0.05, halfWid * 0.52);
+  ctx.quadraticCurveTo(halfLen * 0.55, halfWid * 0.58, halfLen, 0);
   ctx.closePath();
   ctx.fill();
-  ctx.lineWidth = Math.max(1, wid * 0.08);
+  ctx.lineWidth = Math.max(1, wid * 0.07);
   ctx.strokeStyle = '#1a1a1a';
   ctx.stroke();
 
-  // Kierowca — przesunięty bocznie o kąt poślizgu (broadside): im mocniej ślizga
-  // się tylne koło w łuku, tym bardziej "wywiesza się" z motocykla do środka.
-  const slip = angleDiff(rider.velocityAngle, rider.heading);
-  const lean = slip * halfWid * 1.3;
-  ctx.fillStyle = RIDER_SUIT_COLOR;
+  // Opony: tylna (napędowa, ślizgająca się) i przednia, wystające poza zwężone końce
+  // nadwozia — rysowane NA WIERZCHU, żeby było je w ogóle widać.
+  for (const wheelX of [-halfLen * 0.92, halfLen * 0.94]) {
+    ctx.fillStyle = WHEEL_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(wheelX, 0, halfWid * 0.4, halfWid * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = WHEEL_RIM_COLOR;
+    ctx.lineWidth = Math.max(0.6, halfWid * 0.05);
+    ctx.beginPath();
+    ctx.ellipse(wheelX, 0, halfWid * 0.22, halfWid * 0.12, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Kask — przesunięty bocznie razem z kierowcą (broadside): im mocniej ślizga się
+  // tylne koło w łuku, tym bardziej kierowca "wywiesza się" do środka.
+  ctx.fillStyle = HELMET_COLOR;
   ctx.beginPath();
-  ctx.ellipse(halfLen * 0.02, lean, halfWid * 0.34, halfWid * 0.46, 0, 0, Math.PI * 2);
+  ctx.arc(halfLen * 0.24, lean, halfWid * 0.34, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = rider.color;
-  ctx.beginPath();
-  ctx.arc(halfLen * 0.34, lean, halfWid * 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.lineWidth = Math.max(1, wid * 0.06);
+  ctx.lineWidth = Math.max(1, wid * 0.05);
   ctx.strokeStyle = '#1a1a1a';
   ctx.stroke();
+  ctx.fillStyle = rider.color;
+  ctx.beginPath();
+  ctx.arc(halfLen * 0.34, lean, halfWid * 0.14, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.restore();
 }

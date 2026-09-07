@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   add,
   angleDiff,
-  approach,
   clamp,
   closestPointsSegmentSegment,
   distance,
@@ -41,14 +40,6 @@ describe('geometry', () => {
   it('angleDiff daje najkrótszą różnicę', () => {
     expect(angleDiff(0, Math.PI / 4)).toBeCloseTo(Math.PI / 4, 10);
     expect(angleDiff(-Math.PI + 0.1, Math.PI - 0.1)).toBeCloseTo(-0.2, 10);
-  });
-
-  it('approach nie przekracza celu i respektuje osobne tempo', () => {
-    expect(approach(0, 10, 5, 20, 1)).toBe(5);
-    expect(approach(0, 10, 100, 20, 1)).toBe(10);
-    expect(approach(10, 0, 5, 20, 1)).toBe(0);
-    expect(approach(10, 0, 5, 3, 1)).toBe(7);
-    expect(approach(5, 5, 1, 1, 1)).toBe(5);
   });
 
   it('clamp ogranicza do przedziału', () => {
