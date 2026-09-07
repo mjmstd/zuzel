@@ -3,12 +3,13 @@ import { createInitialState, tick } from './engine/race.ts';
 import type { RiderSpec } from './engine/race.ts';
 import { defaultRaceConfig, defaultTrack } from './engine/config.ts';
 import { scoreRace } from './engine/scoring.ts';
-import { chooseSteer } from './ai/bot.ts';
+import { AI_LEVEL_LABELS, chooseSteer } from './ai/bot.ts';
+import type { AiLevel } from './ai/bot.ts';
 import { fitCamera, resizeCanvasToDisplaySize } from './render/camera.ts';
 import { drawRace } from './render/canvas.ts';
 import { KeyboardInput, PLAYER_CONTROLS } from './ui/input.ts';
 import { renderHud, clearHud } from './ui/hud.ts';
-import { renderStartScreen, renderResultsScreen, clearOverlay } from './ui/screens.ts';
+import { renderStartScreen, renderResultsScreen, renderCountdown, clearOverlay } from './ui/screens.ts';
 import type { HumanCount } from './ui/screens.ts';
 import type { RaceState, Steer } from './engine/types.ts';
 
@@ -27,18 +28,22 @@ const keyboard = new KeyboardInput();
 const RIDER_COLORS = ['#e6362f', '#3d7dca', '#f2f2f2', '#f4c430'];
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
+const COUNTDOWN_SECONDS = 3;
 
 let raceState: RaceState | null = null;
 let humanIds: number[] = [];
+let aiLevel: AiLevel = 'pro';
 let rafHandle = 0;
 let accumulator = 0;
 let lastTimestamp = 0;
+let raceStartAt = 0;
+let countdownDone = false;
 
-function buildSpecs(humanCount: HumanCount): RiderSpec[] {
+function buildSpecs(humanCount: HumanCount, level: AiLevel): RiderSpec[] {
   return RIDER_COLORS.map((color, i) => ({
     id: i + 1,
     color,
-    name: i < humanCount ? `Gracz ${i + 1}` : `Bot ${i - humanCount + 1}`,
+    name: i < humanCount ? `Gracz ${i + 1}` : `Bot ${i - humanCount + 1} (${AI_LEVEL_LABELS[level]})`,
   }));
 }
 
@@ -55,7 +60,7 @@ function computeInputs(state: RaceState): Record<number, Steer> {
     }
     const humanIndex = humanIds.indexOf(rider.id);
     const scheme = humanIndex >= 0 ? PLAYER_CONTROLS[humanIndex] : undefined;
-    inputs[rider.id] = scheme ? keyboard.steerFor(scheme) : chooseSteer(rider, state.riders, track, 'pro');
+    inputs[rider.id] = scheme ? keyboard.steerFor(scheme) : chooseSteer(rider, state.riders, track, aiLevel);
   }
   return inputs;
 }
@@ -69,6 +74,19 @@ function render(state: RaceState): void {
 
 function loop(timestamp: number): void {
   if (!raceState) return;
+
+  if (timestamp < raceStartAt) {
+    render(raceState);
+    renderCountdown(overlayEl!, Math.ceil((raceStartAt - timestamp) / 1000));
+    lastTimestamp = timestamp;
+    rafHandle = requestAnimationFrame(loop);
+    return;
+  }
+  if (!countdownDone) {
+    countdownDone = true;
+    clearOverlay(overlayEl!);
+  }
+
   const frameDelta = Math.min(0.25, (timestamp - lastTimestamp) / 1000);
   lastTimestamp = timestamp;
   accumulator += frameDelta;
@@ -93,12 +111,14 @@ function loop(timestamp: number): void {
   rafHandle = requestAnimationFrame(loop);
 }
 
-function startRace(humanCount: HumanCount): void {
-  const specs = buildSpecs(humanCount);
+function startRace(humanCount: HumanCount, level: AiLevel): void {
+  const specs = buildSpecs(humanCount, level);
   humanIds = specs.slice(0, humanCount).map((s) => s.id);
+  aiLevel = level;
   raceState = createInitialState(track, cfg, specs);
-  clearOverlay(overlayEl!);
   lastTimestamp = performance.now();
+  raceStartAt = lastTimestamp + COUNTDOWN_SECONDS * 1000;
+  countdownDone = false;
   accumulator = 0;
   cancelAnimationFrame(rafHandle);
   rafHandle = requestAnimationFrame(loop);

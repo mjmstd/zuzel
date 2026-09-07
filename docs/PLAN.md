@@ -221,17 +221,30 @@ Do tego czasu `TRACK_FORMAT.md` opisuje docelowy, a nie aktualnie używany forma
 
 ## 7. AI przeciwnika
 
-Wspólny interfejs `chooseSteer(state, riderId): -1 | 0 | 1`, trzy poziomy:
+Wspólny interfejs `chooseSteer(rider, allRiders, track, level): -1 | 0 | 1` — pure pursuit:
+celuje w punkt na torze odległy o `lookahead(speed)` przed sobą i skręca w jego stronę,
+więc hamowanie przed łukiem wychodzi samo z ograniczonego przyczepnością skrętu (`grip`),
+bez osobnej logiki. Trzy poziomy różnią się trzema parametrami tej samej funkcji:
 
-1. **Nowicjusz** — steruje w stronę osi toru: jeśli `offset > próg` skręca do środka,
-   inaczej jedzie prosto; nie reaguje na innych zawodników.
-2. **Zawodowiec** — steruje w stronę punktu na osi toru odległego o `lookahead(speed)`
-   przed sobą (klasyczny pure pursuit), więc sam zwalnia przed łukiem, bo `grip` naturalnie
-   go spowalnia; unika kolizji przez lokalne odpychanie od zawodników w promieniu kolizji.
-3. **Mistrz** — jak wyżej + krycie wewnętrznej linii przy wyprzedzaniu i pod presją
-   z tyłu, agresywniejszy `lookahead` na prostej.
+1. **Nowicjusz** — ten sam bazowy `lookahead` co zawodowiec przy niskiej prędkości (żeby
+   kilku nowicjuszy obok siebie na starcie nie zjeżdżało się w jeden punkt — to się realnie
+   zdarzało i blokowało bieg na zawsze, patrz `ai-race.test.ts`), ale rośnie ze wzrostem
+   prędkości dużo wolniej niż u pozostałych — na torze "widzi" mniej naprzód, więc hamuje
+   przed łukiem później i częściej wypada. Ma najsłabsze (ale nie zerowe) unikanie kolizji.
+2. **Zawodowiec** — `lookahead` rosnący z prędkością, pełne unikanie kolizji lokalnym
+   odpychaniem od zawodników w promieniu kolizji, jedzie osią toru.
+3. **Mistrz** — najdłuższy zasięg przewidywania przy dużej prędkości, najsilniejsze
+   unikanie kolizji, oraz niewielkie odchylenie celu w stronę wewnętrznej krawędzi
+   (krótsza droga na łuku). Świadomie **bez** agresywnego krycia linii — silniejsze
+   odchylenie testowo powodowało powtarzalne obcieranie wewnętrznej bandy i wolniejsze
+   czasy niż bez niego, więc zostało przycięte do wartości bezpiecznej.
+
+Krycie/blokowanie pod presją z tyłu (jak przy prawdziwym wyprzedzaniu) **nie jest**
+zaimplementowane — to kandydat na kolejną iterację AI, nie część obecnego M4.
 
 AI odpytuje ten sam silnik fizyki co gracz — nie ma osobnego modelu ruchu do utrzymania.
+Test `tests/ai-race.test.ts` przejeżdża pełny bieg dla każdej kombinacji poziomów (w tym
+4× ten sam poziom) i pilnuje, żeby żadna kombinacja nie zawiesiła się na stałe.
 
 ---
 
@@ -271,17 +284,19 @@ Każdy etap kończy się działającą, wypchniętą wersją. „Done” = testy
 
 | # | Etap | Zakres | Done, gdy… | Szac. |
 |---|---|---|---|---|
-| **M0** | Fundament | Vite + TS + Vitest + ESLint, CI, szkielet katalogów, deploy pustej strony | pipeline zielony, strona wstaje | 1 sesja |
-| **M1** | Silnik ruchu | `types`, `geometry`, `track`, `rules.legalMoves/applyMove`, format toru, 1 tor testowy | testy jednostkowe ruchu, bandy i sektorów przechodzą (bez UI) | 1–2 sesje |
-| **M2** | Grywalny hot-seat | render toru i kresek, podgląd 9 ruchów, sterowanie, licznik okrążeń, meta | da się przejechać 4 okrążenia w 2 osoby | 2 sesje |
-| **M3** | Zasady żużlowe | upadki i kary, kolizje (warianty A/B/C), procedura startu, punktacja biegu | bieg kończy się tabelką 3-2-1-0 | 1–2 sesje |
-| **M4** | AI | 3 poziomy botów, dobór składu biegu | bot na poziomie „zawodowiec” kończy bieg bez upadku | 2 sesje |
+| **M0** ✅ | Fundament | Vite + TS + Vitest, CI, szkielet katalogów | pipeline zielony, strona wstaje | 1 sesja |
+| **M1** ✅ | Silnik fizyki | `types`, `geometry`, `track` (owal analityczny), `physics.stepRider`, `rules`, tor testowy | 37 testów jednostkowych fizyki, bandy i sektorów przechodzi | 1–2 sesje |
+| **M2** ✅ | Grywalny hot-seat | render toru, sterowanie klawiaturą (do 2 graczy), licznik okrążeń, meta, ekran wyników | da się przejechać 4 okrążenia w 2 osoby — zweryfikowane w przeglądarce | 2 sesje |
+| **M3** ✅ | Zasady żużlowe | upadki i kary (`recoverOntoTrack`), kolizje (`ghost`/`solid`), 3‑sekundowe odliczanie startu, punktacja biegu | bieg kończy się tabelką 3-2-1-0 | 1–2 sesje |
+| **M4** ✅ | AI | 3 realnie różne poziomy botów (zasięg przewidywania, siła unikania kolizji, linia przejazdu), wybór poziomu w ekranie startu | każda kombinacja poziomów (w tym sam na sam z tej samej klasy) kończy bieg — pokryte testem regresyjnym `ai-race.test.ts` | 2 sesje |
 | **M5** | Edytor torów | rysowanie band, sektory, walidacja, import/eksport, 4–6 torów | tor narysowany w edytorze da się przejechać | 2 sesje |
 | **M6** | Mecz i liga | program 15 biegów, protokół, tabela, zapis stanu | rozegrany pełny mecz z podsumowaniem | 2 sesje |
 | **M7** | Szlify | animacje, dźwięki, mobile, powtórki, ustawienia, samouczek | gra jest przyjemna dla kogoś, kto widzi ją pierwszy raz | 1–2 sesje |
 | **M8** | Online (opcja) | serwer WS lub gra korespondencyjna | dwie osoby grają z dwóch komputerów | 3+ sesje |
 
-Ścieżka do „gra się fajnie”: **M0 → M1 → M2 → M3 → M4**. Reszta to rozbudowa.
+Ścieżka do „gra się fajnie” (**M0 → M1 → M2 → M3 → M4**) jest zamknięta — gra jest grywalna
+od początku do końca, z botami i wynikami. Dalej: M5 (edytor torów, bo jeden tor szybko się
+znudzi) albo M7 (szlify), w zależności co bardziej przybliża do „chcę w to jeszcze zagrać”.
 
 ---
 

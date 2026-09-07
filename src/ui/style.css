@@ -124,6 +124,24 @@ html, body {
   gap: 10px;
 }
 
+.panel .options.row {
+  flex-direction: row;
+}
+
+.option-group {
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.option-group .group-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .panel button {
   font: inherit;
   font-size: 16px;
@@ -134,7 +152,30 @@ html, body {
   background: #2a343c;
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel button.choice {
+  flex: 1;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+.panel button.choice.selected {
+  background: #3a4854;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.start-btn {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.countdown {
+  font-size: 110px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
 .panel button:hover {
