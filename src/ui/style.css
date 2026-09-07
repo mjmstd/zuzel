@@ -84,7 +84,7 @@ html, body {
   font-size: 13px;
   color: var(--muted);
   max-width: 220px;
-  margin-right: 44px; /* miejsce na przycisk wyciszenia w #settings */
+  margin-right: 86px; /* miejsce na przyciski ustawień/wyciszenia w #settings */
 }
 
 #hud .controls-hint:empty {
@@ -99,7 +99,7 @@ html, body {
 
 @media (max-width: 640px) {
   #hud {
-    padding: 8px 54px 8px 10px; /* z prawej miejsce na przycisk wyciszenia z #settings */
+    padding: 8px 96px 8px 10px; /* z prawej miejsce na przyciski ustawień/wyciszenia z #settings */
     gap: 6px;
   }
 
@@ -269,7 +269,8 @@ html, body {
   pointer-events: none;
 }
 
-#touch-controls:empty {
+#touch-controls:empty,
+#touch-controls.hidden-while-tuning {
   display: none;
 }
 
@@ -318,6 +319,118 @@ html, body {
   color: var(--text);
   font-size: 16px;
   cursor: pointer;
+}
+
+/* --- Panel strojenia fizyki --- */
+
+#tuning-panel {
+  position: absolute;
+  top: 54px;
+  right: 16px;
+  width: 300px;
+  max-height: calc(100vh - 74px);
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+#tuning-panel:empty {
+  display: none;
+}
+
+#tuning-panel .tuning-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+#tuning-panel .tuning-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+#tuning-panel .tuning-header button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+
+#tuning-panel .tuning-group {
+  margin-bottom: 16px;
+}
+
+#tuning-panel .group-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+#tuning-panel .tuning-field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+#tuning-panel .tuning-field-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+#tuning-panel .tuning-value {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#tuning-panel input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+#tuning-panel .tuning-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+#tuning-panel .tuning-reset {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #2a343c;
+  color: var(--text);
+  cursor: pointer;
+}
+
+#tuning-panel .tuning-reset:hover {
+  background: #384450;
+}
+
+@media (max-width: 640px) {
+  #tuning-panel {
+    top: 50px;
+    right: 10px;
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 60px);
+  }
 }
 
 /* --- Samouczek na ekranie startu --- */

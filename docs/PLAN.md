@@ -330,6 +330,13 @@ to osobna, większa funkcja), brak regulacji głośności (tylko wł./wył.), d�
 tylko dla graczy-ludzi (nie dla botów, żeby nie było kakofonii przy 4 silnikach). Jeden tor
 wciąż jest jedyny — to M5.
 
+**Po M7 (poza numeracją):** panel suwaków (`⚙` obok wyciszenia) do strojenia `RaceConfig`
+na żywo, w trakcie gry — prędkość, przyspieszenie, skręt/poślizg, kary za upadek/kolizje,
+wymiary hitboxa, przełącznik kolizji solid/ghost. Zmiany działają natychmiast (ten sam
+obiekt configu, co silnik fizyki), persystują w `localStorage` i mają przycisk powrotu do
+domyślnych. Odpowiedź na to, że dostrajanie fizyki samą rozmową (opisami: "zbyt szybko",
+"zbyt ślisko") jest wolne — gracz dostraja sam, patrząc na wynik. Zob. `src/ui/tuning.ts`.
+
 Dalej: **M5 (edytor torów)** — jeden tor szybko się znudzi, to teraz najbardziej odczuwalny brak.
 
 ---

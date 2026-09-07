@@ -161,3 +161,8 @@ interface RaceConfig {
   riderWidth: number;       // pełna szerokość kapsuły
 }
 ```
+
+Wszystkie powyższe parametry (poza `laps` i geometrią toru) można strzelić na żywo, w trakcie
+gry, panelem suwaków pod przyciskiem `⚙` — patrz `src/ui/tuning.ts`. Zmiana natychmiast trafia
+do tego samego obiektu configu, którego używa `tick()`, więc efekt widać w kolejnej klatce, bez
+restartu biegu. Ustawienia zostają zapamiętane w `localStorage` między sesjami.

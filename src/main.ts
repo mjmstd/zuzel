@@ -13,7 +13,9 @@ import { renderHud, clearHud } from './ui/hud.ts';
 import { renderStartScreen, renderResultsScreen, renderCountdown, clearOverlay } from './ui/screens.ts';
 import type { HumanCount } from './ui/screens.ts';
 import type { RaceState, Steer, Vec2 } from './engine/types.ts';
+import type { RaceConfig } from './engine/types.ts';
 import { sound } from './audio/sound.ts';
+import { renderTuningPanel, clearTuningPanel } from './ui/tuning.ts';
 
 const canvas = document.getElementById('board') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d');
@@ -21,12 +23,15 @@ const hudEl = document.getElementById('hud');
 const overlayEl = document.getElementById('overlay');
 const touchEl = document.getElementById('touch-controls');
 const settingsEl = document.getElementById('settings');
-if (!ctx || !hudEl || !overlayEl || !touchEl || !settingsEl) {
+const tuningPanelEl = document.getElementById('tuning-panel');
+if (!ctx || !hudEl || !overlayEl || !touchEl || !settingsEl || !tuningPanelEl) {
   throw new Error('Brakuje elementów DOM wymaganych do uruchomienia gry.');
 }
 
 const track = createOvalTrack(defaultTrack);
-const cfg = defaultRaceConfig;
+// Własna kopia — `defaultRaceConfig` zostaje nietknięty jako punkt odniesienia dla
+// przycisku "Przywróć domyślne" w panelu strojenia.
+const cfg: RaceConfig = { ...defaultRaceConfig };
 const keyboard = new KeyboardInput();
 const touchCapable = isTouchDevice();
 
@@ -35,6 +40,7 @@ const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
 const COUNTDOWN_SECONDS = 3;
 const MUTE_STORAGE_KEY = 'zuzel-muted';
+const TUNING_STORAGE_KEY = 'zuzel-tuning';
 
 let raceState: RaceState | null = null;
 let humanIds: number[] = [];
@@ -272,14 +278,64 @@ function startReplay(): void {
   rafHandle = requestAnimationFrame(loop);
 }
 
+function persistTuning(): void {
+  try {
+    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(cfg));
+  } catch {
+    // localStorage może być niedostępny (np. tryb prywatny) — ustawienia po prostu
+    // nie przetrwają odświeżenia strony.
+  }
+}
+
+function applyStoredTuning(): void {
+  try {
+    const raw = localStorage.getItem(TUNING_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Partial<RaceConfig>;
+    for (const key of Object.keys(defaultRaceConfig) as (keyof RaceConfig)[]) {
+      if (key in parsed) (cfg as unknown as Record<string, unknown>)[key] = parsed[key];
+    }
+  } catch {
+    // Brak zapisanych ustawień albo dane uszkodzone — zostajemy przy domyślnych.
+  }
+}
+
+function openTuningPanel(): void {
+  // Na dotyku panel jest węższy niż ekran — chowamy przyciski sterowania pod spodem,
+  // żeby nie przebijały się na brzegach i nie łapały przypadkowych dotknięć.
+  touchEl!.classList.add('hidden-while-tuning');
+  renderTuningPanel(tuningPanelEl!, cfg, {
+    onChange: persistTuning,
+    onReset: () => {
+      Object.assign(cfg, defaultRaceConfig);
+      persistTuning();
+      openTuningPanel();
+    },
+    onClose: closeTuningPanel,
+  });
+}
+
+function closeTuningPanel(): void {
+  clearTuningPanel(tuningPanelEl!);
+  touchEl!.classList.remove('hidden-while-tuning');
+}
+
+function toggleTuningPanel(): void {
+  if (tuningPanelEl!.childElementCount > 0) closeTuningPanel();
+  else openTuningPanel();
+}
+
 function renderSettings(): void {
-  settingsEl!.innerHTML = `<button id="mute-btn" aria-label="Wycisz dźwięk">${sound.muted ? '🔇' : '🔊'}</button>`;
+  settingsEl!.innerHTML = `
+    <button id="tuning-btn" aria-label="Ustawienia fizyki">⚙</button>
+    <button id="mute-btn" aria-label="Wycisz dźwięk">${sound.muted ? '🔇' : '🔊'}</button>`;
   settingsEl!.querySelector('#mute-btn')?.addEventListener('click', () => {
     sound.resume();
     sound.setMuted(!sound.muted);
     localStorage.setItem(MUTE_STORAGE_KEY, sound.muted ? '1' : '0');
     renderSettings();
   });
+  settingsEl!.querySelector('#tuning-btn')?.addEventListener('click', toggleTuningPanel);
 }
 
 function showStartScreen(): void {
@@ -297,5 +353,6 @@ try {
 } catch {
   // localStorage może być niedostępny (np. tryb prywatny) — zaczynamy z dźwiękiem włączonym.
 }
+applyStoredTuning();
 renderSettings();
 showStartScreen();
